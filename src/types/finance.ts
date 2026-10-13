@@ -18,6 +18,7 @@ export interface Account {
   created_at?: string;
   // Computed fields
   saldo_actual?: number;
+  saldo_en_usd?: number;
   saldo_en_ves?: number;
 }
 
@@ -39,7 +40,8 @@ export interface Transaction {
   tipo: 'ingreso' | 'gasto';
   monto: number;
   moneda: Currency;
-  monto_ves: number;
+  monto_usd: number; // Valor base invariante guardado en USD
+  monto_ves: number; // Equivalente calculado en VES a la tasa de la transacción
   tasa_cambio: number;
   fecha: string; // ISO string
   nota?: string;
@@ -64,7 +66,10 @@ export interface Budget {
   user_id?: string;
   category_id: string;
   mes: string; // 'YYYY-MM'
-  monto_limite: number; // Siempre en VES
+  monto_limite: number; // Monto límite en USD (ancla real contra la devaluación)
+  moneda?: Currency; // Moneda original en la que se configuró ('VES' | 'USD')
+  monto_original?: number; // Monto original ingresado por el usuario
+  tasa_cambio?: number; // Tasa al momento de fijar el presupuesto
   created_at?: string;
   // Computed
   gastado_mes?: number;
@@ -96,10 +101,13 @@ export interface ExchangeRate {
 }
 
 export interface FinancialSummary {
-  patrimonio_ves: number;
   patrimonio_usd: number;
+  patrimonio_ves: number;
+  ingresos_mes_usd: number;
   ingresos_mes_ves: number;
+  gastos_mes_usd: number;
   gastos_mes_ves: number;
+  balance_mes_usd: number;
   balance_mes_ves: number;
   ahorro_tasa_mes: number;
 }

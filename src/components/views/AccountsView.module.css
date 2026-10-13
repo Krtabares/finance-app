@@ -1,0 +1,655 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+}
+
+.ambientGlow {
+  position: absolute;
+  top: -3rem;
+  right: 25%;
+  width: 24rem;
+  height: 10rem;
+  background-color: rgba(34, 197, 94, 0.05);
+  filter: blur(120px);
+  pointer-events: none;
+  border-radius: 9999px;
+}
+
+/* Header Section */
+.headerSection {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (min-width: 768px) {
+  .headerSection {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.headerInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.badgeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dotGreen {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #22c55e;
+}
+
+.badgeText {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a3a3a3;
+}
+
+.heroBalanceRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.heroBalanceTitle {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: #ededf0;
+  line-height: 1;
+}
+
+.heroBalanceUnit {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: #a3a3a3;
+}
+
+.heroBalanceSub {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  color: #a3a3a3;
+}
+
+.currencyBar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-top: 8px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  flex-wrap: wrap;
+}
+
+.currencyItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currencyLabel {
+  color: #737373;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.currencyVal {
+  color: #e5e5e5;
+  font-weight: 500;
+}
+
+.currencyEquivalent {
+  color: #737373;
+  font-size: 11px;
+}
+
+.dotSeparator {
+  color: #262626;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btnTransfer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background-color: #121419;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ededf0;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnTransfer:hover {
+  background-color: #181b22;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.btnNewAccount {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background-color: #f5f5f5;
+  color: #090a0d;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnNewAccount:hover {
+  background-color: #ffffff;
+}
+
+/* Distribution bar */
+.distributionSection {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.distributionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.distributionTitle {
+  color: #a3a3a3;
+}
+
+.distributionSub {
+  color: #737373;
+  font-size: 11px;
+}
+
+.distributionRight {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #a3a3a3;
+}
+
+.progressBar {
+  width: 100%;
+  height: 4px;
+  background-color: rgba(38, 38, 38, 0.8);
+  border-radius: 9999px;
+  overflow: hidden;
+  display: flex;
+}
+
+.progressSegmentUsd {
+  height: 100%;
+  background-color: #e5e5e5;
+  transition: width 0.3s ease;
+}
+
+.progressSegmentVes {
+  height: 100%;
+  background-color: rgba(16, 185, 129, 0.8);
+  transition: width 0.3s ease;
+}
+
+.progressSegmentUsdt {
+  height: 100%;
+  background-color: rgba(56, 189, 248, 0.8);
+  transition: width 0.3s ease;
+}
+
+.progressSegmentEur {
+  height: 100%;
+  background-color: rgba(245, 158, 11, 0.8);
+  transition: width 0.3s ease;
+}
+
+.distributionLegend {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-top: 2px;
+  font-size: 12px;
+  color: #a3a3a3;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Main Grid */
+.mainGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+  margin-top: 40px;
+}
+
+@media (min-width: 1024px) {
+  .mainGrid {
+    grid-template-columns: 8fr 4fr;
+  }
+}
+
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.columnHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.columnTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.columnTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ededf0;
+}
+
+.badgeCount {
+  font-size: 11px;
+  background-color: #121419;
+  color: #878a99;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.columnActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconBtn {
+  color: #878a99;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.iconBtn:hover {
+  color: #ededf0;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: rgba(23, 23, 23, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.filterPill {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #a3a3a3;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.filterPillActive {
+  background-color: #262626;
+  color: #f5f5f5;
+  font-weight: 500;
+}
+
+.accountsCardList {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(23, 23, 23, 0.25);
+  overflow: hidden;
+}
+
+.accountRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background-color 0.15s ease;
+}
+
+.accountRow:last-child {
+  border-bottom: none;
+}
+
+.accountRow:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.accountLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.accountIconBox {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(38, 38, 38, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d4d4d4;
+  flex-shrink: 0;
+}
+
+.accountTextGroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.accountName {
+  font-size: 14px;
+  color: #e5e5e5;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.accountSubtitle {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #a3a3a3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.accountRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.accountAmountGroup {
+  text-align: right;
+}
+
+.accountAmount {
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #f5f5f5;
+  font-weight: 500;
+}
+
+.accountEquivalent {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #a3a3a3;
+}
+
+.btnDeleteAccount {
+  color: #737373;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.btnDeleteAccount:hover {
+  color: #f87171;
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+.calloutStrip {
+  padding: 16px;
+  border-radius: 12px;
+  background-color: rgba(13, 15, 19, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.calloutContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.calloutIcon {
+  color: #22c55e;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.calloutText {
+  font-size: 13px;
+  color: #878a99;
+}
+
+.calloutLink {
+  font-size: 12px;
+  color: #ededf0;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.calloutLink:hover {
+  color: #ffffff;
+}
+
+/* Right Column (Movimientos Internos) */
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.linkHistorial {
+  font-size: 12px;
+  color: #878a99;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: color 0.15s ease;
+}
+
+.linkHistorial:hover {
+  color: #ededf0;
+}
+
+.transfersCard {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(23, 23, 23, 0.25);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transfersList {
+  display: flex;
+  flex-direction: column;
+}
+
+.transferItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.transferItem:first-child {
+  padding-top: 0;
+}
+
+.transferItem:last-child {
+  border-bottom: none;
+}
+
+.transferTopRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.transferPair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #e5e5e5;
+  min-width: 0;
+}
+
+.transferFrom {
+  color: #a3a3a3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.transferArrow {
+  font-size: 12px;
+  color: #737373;
+  flex-shrink: 0;
+}
+
+.transferTo {
+  color: #e5e5e5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.transferAmountVes {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 500;
+  font-size: 12px;
+  color: #34d399;
+  flex-shrink: 0;
+}
+
+.transferAmountUsdt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 500;
+  font-size: 12px;
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.transferAmountUsd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 500;
+  font-size: 12px;
+  color: #e5e5e5;
+  flex-shrink: 0;
+}
+
+.transferBottomRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #a3a3a3;
+}
+
+.btnInternalAction {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: rgba(38, 38, 38, 0.6);
+  color: #d4d4d4;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+  margin-top: 8px;
+}
+
+.btnInternalAction:hover {
+  background-color: #262626;
+  color: #ffffff;
+}

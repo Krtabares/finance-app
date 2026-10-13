@@ -53,12 +53,16 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('ingreso', 'gasto')),
     monto NUMERIC(18, 4) NOT NULL,
     moneda VARCHAR(10) NOT NULL DEFAULT 'VES',
+    monto_usd NUMERIC(18, 4) NOT NULL DEFAULT 0, -- Monto base invariante guardado en USD
     monto_ves NUMERIC(18, 4) NOT NULL, -- Monto equivalente calculado a la tasa del momento
     tasa_cambio NUMERIC(18, 4) DEFAULT 1.0, -- Tasa usada al momento del registro
     fecha TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     nota TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Si la tabla ya existía, asegurar que tenga la columna monto_usd:
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS monto_usd NUMERIC(18, 4) DEFAULT 0;
 
 -- 6. TABLA: transfers (Transferencias entre cuentas del usuario)
 CREATE TABLE IF NOT EXISTS public.transfers (
@@ -80,7 +84,7 @@ CREATE TABLE IF NOT EXISTS public.budgets (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     category_id UUID NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
     mes VARCHAR(7) NOT NULL, -- Formato 'YYYY-MM'
-    monto_limite NUMERIC(18, 4) NOT NULL, -- En VES
+    monto_limite NUMERIC(18, 4) NOT NULL, -- Monto límite en USD (ancla de estabilidad contra inflación)
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     CONSTRAINT unique_user_category_month UNIQUE(user_id, category_id, mes)
 );

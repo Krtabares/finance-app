@@ -19,6 +19,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     transactions,
     categories,
     budgets,
+    rates,
     preferredViewCurrency,
     convert,
     isSupabaseMode,
@@ -46,7 +47,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const heroParts = formatAmountParts(dominantNetWorth, preferredViewCurrency);
 
-  // Dynamic Month-over-Month variation calculation
+  // Dynamic Month-over-Month variation calculation en base USD (inmune a distorsión inflacionaria)
   const monthComparison = useMemo(() => {
     const now = new Date();
     const curM = now.getMonth();
@@ -63,14 +64,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const d = new Date(tx.fecha);
       const m = d.getMonth();
       const y = d.getFullYear();
-      const val = tx.monto_ves;
+      const valUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : convert(Number(tx.monto) || 0, tx.moneda, 'USD'));
 
       if (m === curM && y === curY) {
-        if (tx.tipo === 'ingreso') curNet += val;
-        if (tx.tipo === 'gasto') curNet -= val;
+        if (tx.tipo === 'ingreso') curNet += valUsd;
+        if (tx.tipo === 'gasto') curNet -= valUsd;
       } else if (m === prevM && y === prevY) {
-        if (tx.tipo === 'ingreso') prevNet += val;
-        if (tx.tipo === 'gasto') prevNet -= val;
+        if (tx.tipo === 'ingreso') prevNet += valUsd;
+        if (tx.tipo === 'gasto') prevNet -= valUsd;
       }
     });
 
@@ -86,13 +87,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       text: `${sign}${pct.toFixed(1)}% vs mes anterior`,
       isPositive: pct >= 0,
     };
-  }, [transactions]);
+  }, [transactions, convert]);
 
-  // Current month values
-  const ingresosMes = isVes ? summary.ingresos_mes_ves : convert(summary.ingresos_mes_ves, 'VES', 'USD');
-  const gastosMes = isVes ? summary.gastos_mes_ves : convert(summary.gastos_mes_ves, 'VES', 'USD');
-  const secondaryIngresos = isVes ? convert(summary.ingresos_mes_ves, 'VES', 'USD') : summary.ingresos_mes_ves;
-  const secondaryGastos = isVes ? convert(summary.gastos_mes_ves, 'VES', 'USD') : summary.gastos_mes_ves;
+  // Current month values tomados directamente de summary (base en USD, BS calculado)
+  const ingresosMes = isVes ? summary.ingresos_mes_ves : summary.ingresos_mes_usd;
+  const gastosMes = isVes ? summary.gastos_mes_ves : summary.gastos_mes_usd;
+  const secondaryIngresos = isVes ? summary.ingresos_mes_usd : summary.ingresos_mes_ves;
+  const secondaryGastos = isVes ? summary.gastos_mes_usd : summary.gastos_mes_ves;
 
   const fmtSecondary = (val: number) => {
     const sym = isVes ? '$' : 'Bs. ';
@@ -111,12 +112,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return incomeTxs.length;
   }, [transactions]);
 
-  // Límite de presupuesto dinámico
+  // Límite de presupuesto dinámico en base USD
   const budgetStatus = useMemo(() => {
-    const totalPresupuestoVes = budgets.reduce((sum, b) => sum + (b.monto_limite || 0), 0);
+    const totalPresupuestoUsd = budgets.reduce((sum, b) => {
+      const bUsd = b.moneda === 'USD' ? (b.monto_original || b.monto_limite) : (b.monto_limite > 500 ? b.monto_limite / 450 : b.monto_limite);
+      return sum + (bUsd || 0);
+    }, 0);
 
-    if (totalPresupuestoVes > 0) {
-      const pct = Math.round((summary.gastos_mes_ves / totalPresupuestoVes) * 100);
+    if (totalPresupuestoUsd > 0) {
+      const pct = Math.round((summary.gastos_mes_usd / totalPresupuestoUsd) * 100);
       return `${pct}% de límite`;
     }
 
@@ -129,25 +133,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }).length;
 
     return `${gastosCount} ${gastosCount === 1 ? 'salida' : 'salidas'}`;
-  }, [budgets, summary.gastos_mes_ves, transactions, convert]);
+  }, [budgets, summary.gastos_mes_usd, transactions]);
 
   // Ahorro dinámico
-  const ahorroMonto = Math.max(0, summary.ingresos_mes_ves - summary.gastos_mes_ves);
-  const ahorroMontoDominant = isVes ? ahorroMonto : convert(ahorroMonto, 'VES', 'USD');
+  const ahorroMontoDominant = isVes ? summary.balance_mes_ves : summary.balance_mes_usd;
   const ritmoProyectado =
     summary.ahorro_tasa_mes >= 25
       ? 'Saludable'
       : summary.ahorro_tasa_mes > 0
       ? 'Moderado'
-      : summary.ingresos_mes_ves === 0 && summary.gastos_mes_ves === 0
+      : summary.ingresos_mes_usd === 0 && summary.gastos_mes_usd === 0
       ? 'Sin movimientos'
       : 'Ajustado';
 
-  // Flujo Financiero dinámico (últimos 5 meses)
+  // Flujo Financiero dinámico (últimos 5 meses) calculado en USD y proyectado en BS si se requiere
   const cashflowData = useMemo(() => {
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     const now = new Date();
     const list = [];
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
 
     for (let i = 4; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -155,17 +159,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const mYear = d.getFullYear();
       const label = months[mIdx];
 
-      let ing = 0;
-      let gas = 0;
+      let ingUsd = 0;
+      let gasUsd = 0;
 
       transactions.forEach((tx) => {
         const txDate = new Date(tx.fecha);
         if (txDate.getMonth() === mIdx && txDate.getFullYear() === mYear) {
-          const val = isVes ? tx.monto_ves : convert(tx.monto_ves, 'VES', 'USD');
-          if (tx.tipo === 'ingreso') ing += val;
-          if (tx.tipo === 'gasto') gas += val;
+          const valUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : convert(Number(tx.monto) || 0, tx.moneda, 'USD'));
+          if (tx.tipo === 'ingreso') ingUsd += valUsd;
+          if (tx.tipo === 'gasto') gasUsd += valUsd;
         }
       });
+
+      const ing = isVes ? ingUsd * activeUsdRate : ingUsd;
+      const gas = isVes ? gasUsd * activeUsdRate : gasUsd;
 
       list.push({
         label,
@@ -176,7 +183,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     return list;
-  }, [transactions, isVes, convert]);
+  }, [transactions, isVes, convert, rates]);
 
   // Cálculo de coordenadas SVG para las curvas dinámicas
   const chartSvgPaths = useMemo(() => {
@@ -234,7 +241,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return 'receipt_long';
   };
 
-  // Liquidez dinámica por divisa
+  // Liquidez dinámica por divisa evaluada en base USD
   const liquidity = useMemo(() => {
     let usd = 0;
     let ves = 0;
@@ -242,11 +249,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     accounts.forEach((acc) => {
       const balance = acc.saldo_actual ?? acc.saldo_inicial ?? 0;
-      const vesEquivalent = acc.moneda === 'VES' ? balance : convert(balance, acc.moneda, 'VES');
-      if (acc.moneda === 'USD') usd += vesEquivalent;
-      else if (acc.moneda === 'VES') ves += vesEquivalent;
-      else if (acc.moneda === 'USDT') usdt += vesEquivalent;
-      else usd += vesEquivalent;
+      const usdVal = acc.saldo_en_usd ?? convert(balance, acc.moneda, 'USD');
+      if (acc.moneda === 'USD') usd += usdVal;
+      else if (acc.moneda === 'VES') ves += usdVal;
+      else if (acc.moneda === 'USDT') usdt += usdVal;
+      else usd += usdVal;
     });
 
     const total = usd + ves + usdt;
@@ -261,14 +268,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return { usdPct, vesPct, usdtPct, hasData: true };
   }, [accounts, convert]);
 
-  // Distribución real de gastos por categoría
+  // Distribución real de gastos por categoría (base USD, proyectada a la moneda activa)
   const categorySpending = useMemo(() => {
     const catTotals: { [key: string]: number } = {};
     let totalSpent = 0;
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
 
     transactions.forEach((tx) => {
       if (tx.tipo === 'gasto') {
-        const val = isVes ? tx.monto_ves : convert(tx.monto_ves, 'VES', 'USD');
+        const valUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : convert(Number(tx.monto) || 0, tx.moneda, 'USD'));
+        const val = isVes ? valUsd * activeUsdRate : valUsd;
         totalSpent += val;
         const cat = categories.find((c) => c.id === tx.category_id);
         const name = cat ? cat.nombre : 'Otros Gastos';
@@ -288,7 +297,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 4);
-  }, [transactions, categories, isVes, convert]);
+  }, [transactions, categories, isVes, convert, rates]);
 
   const currentMonthName = useMemo(() => {
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];

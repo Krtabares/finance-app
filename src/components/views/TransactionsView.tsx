@@ -57,10 +57,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   // Export to CSV function
   const handleExportCSV = () => {
-    const headers = ['Fecha', 'Tipo', 'Cuenta', 'Categoria', 'Monto Original', 'Moneda', 'Monto VES', 'Tasa', 'Nota'];
+    const headers = ['Fecha', 'Tipo', 'Cuenta', 'Categoria', 'Monto Original', 'Moneda', 'Monto USD (Base)', 'Monto VES (Calculado)', 'Tasa', 'Nota'];
     const rows = filteredTransactions.map((tx) => {
       const acc = accounts.find((a) => a.id === tx.account_id)?.nombre || '';
       const cat = categories.find((c) => c.id === tx.category_id)?.nombre || '';
+      const montoUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : tx.monto);
       return [
         tx.fecha.substring(0, 10),
         tx.tipo,
@@ -68,6 +69,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         `"${cat}"`,
         tx.monto,
         tx.moneda,
+        montoUsd,
         tx.monto_ves,
         tx.tasa_cambio,
         `"${tx.nota || ''}"`,
@@ -284,7 +286,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       >
                         {isIngreso ? '+' : '-'}{formatCurrency(tx.monto, tx.moneda)}
                       </div>
-                      {tx.moneda !== 'VES' && (
+                      {tx.moneda === 'VES' ? (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                          ≈ ${((Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 1 ? tx.monto_ves / tx.tasa_cambio : 0))).toFixed(2)} USD (Tasa: {tx.tasa_cambio})
+                        </div>
+                      ) : (
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
                           ≈ {formatCurrency(tx.monto_ves, 'VES')} (Tasa: {tx.tasa_cambio})
                         </div>

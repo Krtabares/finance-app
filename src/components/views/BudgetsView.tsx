@@ -1,14 +1,26 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Plus, PieChart, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, CheckCircle2, DollarSign, Coins } from 'lucide-react';
 import { useFinance } from '@/context/FinanceContext';
 import { formatCurrency } from '@/lib/formatters';
 import { BudgetModal } from '@/components/modals/BudgetModal';
 
 export const BudgetsView: React.FC = () => {
-  const { budgets, categories, transactions, deleteBudget, addCategory } = useFinance();
+  const {
+    budgets,
+    categories,
+    transactions,
+    deleteBudget,
+    addCategory,
+    preferredViewCurrency,
+    setPreferredViewCurrency,
+    convert,
+    rates,
+  } = useFinance();
+
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewCurrency, setViewCurrency] = useState<'VES' | 'USD'>(preferredViewCurrency || 'USD');
 
   // New category inline form state
   const [newCatNombre, setNewCatNombre] = useState('');
@@ -19,16 +31,31 @@ export const BudgetsView: React.FC = () => {
 
   React.useEffect(() => {
     setMounted(true);
-  }, []);
+    if (preferredViewCurrency) {
+      setViewCurrency(preferredViewCurrency);
+    }
+  }, [preferredViewCurrency]);
+
+  const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
 
   const computedBudgets = useMemo(() => {
     if (!mounted) {
-      return budgets.map((b) => ({
-        ...b,
-        gastado_ves: 0,
-        porcentaje_usado: 0,
-        restante_ves: b.monto_limite,
-      }));
+      return budgets.map((b) => {
+        const limiteUsd = b.moneda === 'USD'
+          ? (b.monto_original || b.monto_limite)
+          : (b.monto_limite > 500 ? b.monto_limite / activeUsdRate : b.monto_limite);
+        const limiteVes = limiteUsd * activeUsdRate;
+        return {
+          ...b,
+          gastado_ves: 0,
+          gastado_usd: 0,
+          limite_ves: limiteVes,
+          limite_usd: limiteUsd,
+          porcentaje_usado: 0,
+          restante_ves: limiteVes,
+          restante_usd: limiteUsd,
+        };
+      });
     }
 
     const now = new Date();
@@ -36,6 +63,14 @@ export const BudgetsView: React.FC = () => {
     const currentYear = now.getFullYear();
 
     return budgets.map((b) => {
+      // Valor base guardado en USD (ancla real de compra)
+      const limiteUsd = b.moneda === 'USD'
+        ? (b.monto_original || b.monto_limite)
+        : (b.monto_limite > 500 ? b.monto_limite / activeUsdRate : b.monto_limite);
+      // Límite dinámico calculado en bolívares según la tasa vigente
+      const limiteVes = limiteUsd * activeUsdRate;
+
+      let gastadoUsd = 0;
       let gastadoVes = 0;
       transactions.forEach((tx) => {
         const txDate = new Date(tx.fecha);
@@ -45,21 +80,29 @@ export const BudgetsView: React.FC = () => {
           txDate.getMonth() === currentMonth &&
           txDate.getFullYear() === currentYear
         ) {
-          gastadoVes += tx.monto_ves;
+          const txUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : convert(Number(tx.monto) || 0, tx.moneda, 'USD'));
+          const txVes = Number(tx.monto_ves) || (txUsd * (tx.tasa_cambio || activeUsdRate));
+          gastadoUsd += txUsd;
+          gastadoVes += txVes;
         }
       });
 
-      const porcentaje = b.monto_limite > 0 ? (gastadoVes / b.monto_limite) * 100 : 0;
-      const restante = Math.max(0, b.monto_limite - gastadoVes);
+      const porcentaje = limiteUsd > 0 ? (gastadoUsd / limiteUsd) * 100 : 0;
+      const restanteUsd = Math.max(0, limiteUsd - gastadoUsd);
+      const restanteVes = Math.max(0, limiteVes - gastadoVes);
 
       return {
         ...b,
         gastado_ves: gastadoVes,
+        gastado_usd: gastadoUsd,
+        limite_ves: limiteVes,
+        limite_usd: limiteUsd,
         porcentaje_usado: Math.round(porcentaje),
-        restante_ves: restante,
+        restante_ves: restanteVes,
+        restante_usd: restanteUsd,
       };
     });
-  }, [budgets, transactions, mounted]);
+  }, [budgets, transactions, mounted, convert, activeUsdRate]);
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +116,8 @@ export const BudgetsView: React.FC = () => {
     setNewCatNombre('');
   };
 
+  const isUsdView = viewCurrency === 'USD';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
       {/* Top Header */}
@@ -82,26 +127,100 @@ export const BudgetsView: React.FC = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '14px',
         }}
       >
         <div>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Presupuestos Mensuales (VES)</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Establece techos de gasto por categoría para evitar sobrecostos en bolívares.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 800 }}>Presupuestos Mensuales</h3>
+            <span
+              className="badge"
+              style={{
+                background: isUsdView ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                color: isUsdView ? 'var(--accent-emerald)' : 'var(--accent-primary)',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+              }}
+            >
+              Modo {isUsdView ? 'USD ($)' : 'VES (Bs.)'}
+            </span>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Establece y monitorea techos de gasto en <strong>dólares (USD)</strong> o <strong>bolívares (VES)</strong> para protegerte de la inflación.
           </p>
         </div>
 
-        <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-          <Plus size={16} /> Fijar Presupuesto
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Toggle de Moneda de Visualización */}
+          <div
+            style={{
+              display: 'flex',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              padding: '3px',
+              gap: '2px',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setViewCurrency('USD');
+                setPreferredViewCurrency('USD');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                background: isUsdView ? 'var(--accent-emerald)' : 'transparent',
+                color: isUsdView ? '#fff' : 'var(--text-muted)',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                transition: 'all var(--transition-fast)',
+              }}
+            >
+              <DollarSign size={13} /> Dólares (USD)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewCurrency('VES');
+                setPreferredViewCurrency('VES');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                background: !isUsdView ? '#2563eb' : 'transparent',
+                color: !isUsdView ? '#ffffff' : 'var(--text-muted)',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                transition: 'all var(--transition-fast)',
+              }}
+            >
+              <Coins size={13} /> Bolívares (VES)
+            </button>
+          </div>
+
+          <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+            <Plus size={16} /> Fijar Presupuesto
+          </button>
+        </div>
       </div>
 
       {/* Grid de Presupuestos */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))',
           gap: '20px',
         }}
       >
@@ -113,6 +232,32 @@ export const BudgetsView: React.FC = () => {
           let barColor = 'var(--accent-emerald)';
           if (isWarning) barColor = 'var(--accent-amber)';
           if (isOver) barColor = 'var(--accent-rose)';
+
+          // Cifras según la moneda activa
+          const primaryGastado = isUsdView
+            ? formatCurrency(b.gastado_usd, 'USD')
+            : formatCurrency(b.gastado_ves, 'VES');
+          const primaryLimite = isUsdView
+            ? formatCurrency(b.limite_usd, 'USD')
+            : formatCurrency(b.limite_ves, 'VES');
+
+          const secondaryGastado = isUsdView
+            ? formatCurrency(b.gastado_ves, 'VES')
+            : formatCurrency(b.gastado_usd, 'USD');
+          const secondaryLimite = isUsdView
+            ? formatCurrency(b.limite_ves, 'VES')
+            : formatCurrency(b.limite_usd, 'USD');
+
+          const primaryRestante = isUsdView
+            ? formatCurrency(b.restante_usd, 'USD')
+            : formatCurrency(b.restante_ves, 'VES');
+          const secondaryRestante = isUsdView
+            ? formatCurrency(b.restante_ves, 'VES')
+            : formatCurrency(b.restante_usd, 'USD');
+
+          const primaryExceso = isUsdView
+            ? formatCurrency(b.gastado_usd - b.limite_usd, 'USD')
+            : formatCurrency(b.gastado_ves - b.limite_ves, 'VES');
 
           return (
             <div
@@ -126,6 +271,7 @@ export const BudgetsView: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '16px',
+                position: 'relative',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -138,14 +284,27 @@ export const BudgetsView: React.FC = () => {
                       backgroundColor: cat?.color || '#3b82f6',
                     }}
                   />
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>{cat?.nombre || 'Categoría'}</h4>
+                  <div>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>{cat?.nombre || 'Categoría'}</h4>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          color: b.moneda === 'USD' ? 'var(--accent-emerald)' : 'var(--text-dim)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {b.moneda === 'USD' ? '💵 Fijado en USD' : '🇻🇪 Fijado en VES'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <button
                   className="btn-icon"
                   title="Eliminar presupuesto"
                   onClick={() => {
-                    if (confirm('¿Eliminar este presupuesto?')) {
+                    if (confirm(`¿Eliminar el presupuesto de "${cat?.nombre || 'esta categoría'}"?`)) {
                       deleteBudget(b.id);
                     }
                   }}
@@ -160,14 +319,20 @@ export const BudgetsView: React.FC = () => {
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
+                    alignItems: 'baseline',
                     fontSize: '0.82rem',
-                    marginBottom: '6px',
+                    marginBottom: '4px',
                   }}
                 >
                   <span style={{ color: 'var(--text-muted)' }}>Gastado: {b.porcentaje_usado}%</span>
-                  <span style={{ color: isOver ? 'var(--accent-rose)' : 'var(--text-main)', fontWeight: 600 }}>
-                    {formatCurrency(b.gastado_ves, 'VES')} / {formatCurrency(b.monto_limite, 'VES')}
-                  </span>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ color: isOver ? 'var(--accent-rose)' : 'var(--text-main)', fontWeight: 700 }}>
+                      {primaryGastado} / {primaryLimite}
+                    </span>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                      ≈ {secondaryGastado} / {secondaryLimite}
+                    </div>
+                  </div>
                 </div>
 
                 <div
@@ -176,6 +341,7 @@ export const BudgetsView: React.FC = () => {
                     background: 'rgba(255, 255, 255, 0.08)',
                     borderRadius: 'var(--radius-full)',
                     overflow: 'hidden',
+                    marginTop: '6px',
                   }}
                 >
                   <div
@@ -203,12 +369,17 @@ export const BudgetsView: React.FC = () => {
                 {isOver ? (
                   <>
                     <AlertTriangle size={15} />
-                    <span>Límite excedido por {formatCurrency(b.gastado_ves - b.monto_limite, 'VES')}</span>
+                    <span>Límite excedido por {primaryExceso}</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 size={15} />
-                    <span>Te quedan {formatCurrency(b.restante_ves, 'VES')} disponibles</span>
+                    <span>
+                      Te quedan {primaryRestante} disponibles
+                      <span style={{ color: 'var(--text-dim)', marginLeft: '4px' }}>
+                        (≈ {secondaryRestante})
+                      </span>
+                    </span>
                   </>
                 )}
               </div>

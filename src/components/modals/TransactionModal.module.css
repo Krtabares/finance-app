@@ -105,6 +105,10 @@
   align-items: center;
 }
 
+.amountInputWrapper input {
+  padding-right: 80px !important;
+}
+
 .currencyTag {
   position: absolute;
   right: 12px;

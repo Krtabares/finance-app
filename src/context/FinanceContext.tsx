@@ -89,6 +89,40 @@ const STORAGE_KEYS = {
   LAST_SYNC: 'bolivar_finance_last_sync_v1',
 };
 
+const sanitizeTx = (tx: any, fallbackRate: number = 450): Transaction => {
+  const rate = tx.tasa_cambio && tx.tasa_cambio > 1 ? Number(tx.tasa_cambio) : fallbackRate;
+  let montoUsd = Number(tx.monto_usd);
+  if (isNaN(montoUsd) || montoUsd === 0) {
+    if (tx.moneda === 'USD' || tx.moneda === 'USDT') {
+      montoUsd = Number(tx.monto) || 0;
+    } else if (tx.moneda === 'VES') {
+      montoUsd = rate > 0 ? (Number(tx.monto) || 0) / rate : 0;
+    } else {
+      montoUsd = Number(tx.monto) || 0;
+    }
+  }
+  const montoVes = Number(tx.monto_ves) || (montoUsd * rate);
+  return {
+    ...tx,
+    monto_usd: Math.round(montoUsd * 100) / 100,
+    monto_ves: montoVes,
+    tasa_cambio: rate,
+  };
+};
+
+const sanitizeBudget = (b: any, fallbackRate: number = 450): Budget => {
+  let limit = Number(b.monto_limite) || 0;
+  if (limit > 500 && fallbackRate > 0) {
+    limit = Math.round((limit / fallbackRate) * 100) / 100;
+  }
+  return {
+    ...b,
+    monto_limite: limit,
+    moneda: 'USD',
+    monto_original: b.monto_original || limit,
+  };
+};
+
 export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -180,8 +214,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         if (insertedCats) setCategories(insertedCats);
       }
 
-      if (txRes.data) setTransactions(txRes.data);
-      if (bgRes.data) setBudgets(bgRes.data);
+      if (txRes.data) setTransactions(txRes.data.map((t: any) => sanitizeTx(t)));
+      if (bgRes.data) setBudgets(bgRes.data.map((b: any) => sanitizeBudget(b)));
       if (glRes.data) setGoals(glRes.data);
       if (rtRes.data && rtRes.data.length > 0) setRates(rtRes.data);
     } catch (err) {
@@ -246,8 +280,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
             setAccounts(storedAccounts ? JSON.parse(storedAccounts) : INITIAL_ACCOUNTS);
             setCategories(storedCategories ? JSON.parse(storedCategories) : INITIAL_CATEGORIES);
-            setTransactions(storedTransactions ? JSON.parse(storedTransactions) : INITIAL_TRANSACTIONS);
-            setBudgets(storedBudgets ? JSON.parse(storedBudgets) : INITIAL_BUDGETS);
+            setTransactions(storedTransactions ? JSON.parse(storedTransactions).map((t: any) => sanitizeTx(t)) : INITIAL_TRANSACTIONS);
+            setBudgets(storedBudgets ? JSON.parse(storedBudgets).map((b: any) => sanitizeBudget(b)) : INITIAL_BUDGETS);
             setGoals(storedGoals ? JSON.parse(storedGoals) : INITIAL_GOALS);
             if (storedRates) setRates(JSON.parse(storedRates));
             if (storedSource) setActiveRateSource(storedSource);
@@ -454,29 +488,37 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       });
+      const saldoEnUsd = convert(balance, acc.moneda, 'USD');
       const saldoEnVes = convert(balance, acc.moneda, 'VES');
       return {
         ...acc,
         saldo_actual: balance,
+        saldo_en_usd: saldoEnUsd,
         saldo_en_ves: saldoEnVes,
       };
     });
   }, [accounts, transactions, rates]);
 
-  // Financial summary computation
+  // Financial summary computation: base guardada en USD, BS calculado
   const summary = useMemo(() => {
+    let patrimonioUsd = 0;
     let patrimonioVes = 0;
     computedAccounts.forEach((acc) => {
+      patrimonioUsd += acc.saldo_en_usd || 0;
       patrimonioVes += acc.saldo_en_ves || 0;
     });
 
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+
     if (!mounted) {
-      const patrimonioUsd = convert(patrimonioVes, 'VES', 'USD');
       return {
-        patrimonio_ves: patrimonioVes,
         patrimonio_usd: patrimonioUsd,
+        patrimonio_ves: patrimonioVes,
+        ingresos_mes_usd: 0,
         ingresos_mes_ves: 0,
+        gastos_mes_usd: 0,
         gastos_mes_ves: 0,
+        balance_mes_usd: 0,
         balance_mes_ves: 0,
         ahorro_tasa_mes: 0,
       };
@@ -486,29 +528,40 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
+    let ingresosMesUsd = 0;
+    let gastosMesUsd = 0;
     let ingresosMesVes = 0;
     let gastosMesVes = 0;
 
     transactions.forEach((tx) => {
       const txDate = new Date(tx.fecha);
       if (txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear) {
+        // Obtenemos valor base en USD
+        const valUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : convert(Number(tx.monto) || 0, tx.moneda, 'USD'));
+        const valVes = Number(tx.monto_ves) || (valUsd * (tx.tasa_cambio || activeUsdRate));
+
         if (tx.tipo === 'ingreso') {
-          ingresosMesVes += Number(tx.monto_ves) || 0;
+          ingresosMesUsd += valUsd;
+          ingresosMesVes += valVes;
         } else if (tx.tipo === 'gasto') {
-          gastosMesVes += Number(tx.monto_ves) || 0;
+          gastosMesUsd += valUsd;
+          gastosMesVes += valVes;
         }
       }
     });
 
-    const balanceMesVes = ingresosMesVes - gastosMesVes;
-    const ahorroTasaMes = ingresosMesVes > 0 ? (balanceMesVes / ingresosMesVes) * 100 : 0;
-    const patrimonioUsd = convert(patrimonioVes, 'VES', 'USD');
+    const balanceMesUsd = ingresosMesUsd - gastosMesUsd;
+    const balanceMesVes = balanceMesUsd * activeUsdRate;
+    const ahorroTasaMes = ingresosMesUsd > 0 ? (balanceMesUsd / ingresosMesUsd) * 100 : 0;
 
     return {
-      patrimonio_ves: patrimonioVes,
       patrimonio_usd: patrimonioUsd,
+      patrimonio_ves: patrimonioVes,
+      ingresos_mes_usd: ingresosMesUsd,
       ingresos_mes_ves: ingresosMesVes,
+      gastos_mes_usd: gastosMesUsd,
       gastos_mes_ves: gastosMesVes,
+      balance_mes_usd: balanceMesUsd,
       balance_mes_ves: balanceMesVes,
       ahorro_tasa_mes: Math.max(0, Math.round(ahorroTasaMes * 10) / 10),
     };
@@ -527,7 +580,16 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          // Si la columna monto_usd aún no existe en Supabase, reintentar sin ella
+          const { monto_usd, ...rest } = data as any;
+          const retryRes = await supabase.from('transactions').insert({ ...rest, user_id: user.id }).select().single();
+          if (retryRes.data) {
+            setTransactions((prev) => [{ ...retryRes.data, monto_usd: data.monto_usd }, ...prev]);
+            return;
+          }
+          throw error;
+        }
         if (inserted) {
           setTransactions((prev) => [inserted, ...prev]);
           return;
@@ -641,18 +703,32 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const addBudget = async (data: Omit<Budget, 'id'>) => {
     if (isSupabaseConfigured && supabase && user) {
       try {
-        const { data: inserted, error } = await supabase
+        // Try inserting full object
+        let insertPayload: any = {
+          ...data,
+          user_id: user.id,
+        };
+        let { data: inserted, error } = await supabase
           .from('budgets')
-          .insert({
-            ...data,
-            user_id: user.id,
-          })
+          .insert(insertPayload)
           .select()
           .single();
 
-        if (error) throw error;
+        // If error might be due to columns not in table (like moneda or monto_original)
+        if (error) {
+          const minimalPayload = {
+            category_id: data.category_id,
+            mes: data.mes,
+            monto_limite: data.monto_limite,
+            user_id: user.id,
+          };
+          const res = await supabase.from('budgets').insert(minimalPayload).select().single();
+          inserted = res.data;
+          error = res.error;
+        }
+
         if (inserted) {
-          setBudgets((prev) => [...prev, inserted]);
+          setBudgets((prev) => [...prev, { ...inserted, ...data }]);
           return;
         }
       } catch (err) {
@@ -752,14 +828,27 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (!fromAcc || !toAcc) return;
 
     const nowIso = new Date().toISOString();
-    const rateUsed = amountTo > 0 ? amountFrom / amountTo : 1;
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+    
+    let rateUsed = activeUsdRate;
+    if (fromAcc.moneda === 'VES' && toAcc.moneda !== 'VES' && amountTo > 0) {
+      rateUsed = amountFrom / amountTo;
+    } else if (fromAcc.moneda !== 'VES' && toAcc.moneda === 'VES' && amountFrom > 0) {
+      rateUsed = amountTo / amountFrom;
+    }
+
+    const usdFrom = convert(amountFrom, fromAcc.moneda, 'USD');
+    const vesFrom = convert(amountFrom, fromAcc.moneda, 'VES');
+    const usdTo = convert(amountTo, toAcc.moneda, 'USD');
+    const vesTo = convert(amountTo, toAcc.moneda, 'VES');
 
     await addTransaction({
       account_id: fromAccountId,
       tipo: 'gasto',
       monto: amountFrom,
       moneda: fromAcc.moneda,
-      monto_ves: convert(amountFrom, fromAcc.moneda, 'VES'),
+      monto_usd: usdFrom,
+      monto_ves: vesFrom,
       tasa_cambio: rateUsed,
       fecha: nowIso,
       nota: `Transferencia hacia ${toAcc.nombre}${nota ? ` (${nota})` : ''}`,
@@ -770,7 +859,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       tipo: 'ingreso',
       monto: amountTo,
       moneda: toAcc.moneda,
-      monto_ves: convert(amountTo, toAcc.moneda, 'VES'),
+      monto_usd: usdTo,
+      monto_ves: vesTo,
       tasa_cambio: rateUsed,
       fecha: nowIso,
       nota: `Transferencia recibida desde ${fromAcc.nombre}${nota ? ` (${nota})` : ''}`,

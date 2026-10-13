@@ -115,7 +115,10 @@ function FinanceAppContent() {
           )}
 
           {currentTab === 'accounts' && (
-            <AccountsView onOpenTransfer={() => setIsTransactionModalOpen(true)} />
+            <AccountsView
+              onOpenTransfer={() => setIsTransactionModalOpen(true)}
+              onNavigateTab={setCurrentTab}
+            />
           )}
 
           {currentTab === 'transactions' && (
