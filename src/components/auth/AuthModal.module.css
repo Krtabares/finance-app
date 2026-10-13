@@ -1,0 +1,90 @@
+.authCard {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: scaleUp 0.2s ease;
+  overflow: hidden;
+}
+
+.authHeader {
+  padding: 24px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(9, 13, 22, 0.4);
+  position: relative;
+}
+
+.authIconBox {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #6366f1 0%, #10b981 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  margin: 0 auto 12px;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+}
+
+.authClose {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.authClose:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.authForm {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.errorMessage {
+  padding: 10px 14px;
+  background: var(--accent-rose-bg);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--accent-rose);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+
+.successMessage {
+  padding: 10px 14px;
+  background: var(--accent-emerald-bg);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--accent-emerald);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+
+.switchMode {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.switchLink {
+  color: var(--accent-primary);
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 6px;
+  text-decoration: underline;
+}
