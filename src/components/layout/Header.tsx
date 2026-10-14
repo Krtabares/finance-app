@@ -6,9 +6,10 @@ import { useFinance } from '@/context/FinanceContext';
 interface HeaderProps {
   title?: string;
   onOpenNewTransaction: () => void;
+  onOpenGuide?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenNewTransaction }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenNewTransaction, onOpenGuide }) => {
   const {
     preferredViewCurrency,
     setPreferredViewCurrency,
@@ -70,6 +71,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewTransaction }) => {
             USD
           </button>
         </div>
+
+        {onOpenGuide && (
+          <button
+            onClick={onOpenGuide}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800/80 text-xs font-medium tracking-tight transition-all"
+            title="Ver guía paso a paso: ¿Cómo funciona BolívarFinance?"
+          >
+            <span className="material-symbols-outlined text-[16px] text-amber-400">help_outline</span>
+            <span className="hidden sm:inline">¿Cómo funciona?</span>
+          </button>
+        )}
 
         <button
           onClick={onOpenNewTransaction}

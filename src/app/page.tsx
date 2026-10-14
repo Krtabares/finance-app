@@ -14,12 +14,14 @@ import { DebtsView } from '@/components/views/DebtsView';
 import { TransactionModal } from '@/components/modals/TransactionModal';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AuthScreen } from '@/components/auth/AuthScreen';
+import { GuideModal } from '@/components/modals/GuideModal';
 import { Database, ExternalLink, Sparkles, X, LogIn, TrendingUp, Loader2 } from 'lucide-react';
 
 function FinanceAppContent() {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [showSupabaseBanner, setShowSupabaseBanner] = useState(true);
   const { isSupabaseMode, user, isLoading } = useFinance();
 
@@ -97,6 +99,7 @@ function FinanceAppContent() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenGuide={() => setIsGuideOpen(true)}
       />
 
       {/* Main Content Layout */}
@@ -104,11 +107,10 @@ function FinanceAppContent() {
         <Header
           title={getPageTitle()}
           onOpenNewTransaction={() => setIsTransactionModalOpen(true)}
+          onOpenGuide={() => setIsGuideOpen(true)}
         />
 
         <main className="flex-1 px-8 py-8 lg:px-10 lg:py-10 max-w-[1360px] w-full mx-auto space-y-12">
-
-
           {/* Renderizado de vista seleccionada */}
           {currentTab === 'dashboard' && (
             <DashboardView
@@ -148,6 +150,13 @@ function FinanceAppContent() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+      />
+
+      {/* Modal interactivo de Guía / Onboarding */}
+      <GuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        onNavigateTab={setCurrentTab}
       />
     </div>
   );

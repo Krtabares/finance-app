@@ -9,12 +9,14 @@ interface SidebarProps {
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
   onOpenAuth?: () => void;
+  onOpenGuide?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   onOpenAuth,
+  onOpenGuide,
 }) => {
   const { rates, liveQuotes, user, isSupabaseMode, logoutUser } = useFinance();
 
@@ -55,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = currentTab === item.id;
           return (
@@ -75,6 +77,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
+
+        {onOpenGuide && (
+          <div className="pt-3 mt-3 border-t border-neutral-800/40">
+            <button
+              onClick={onOpenGuide}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 text-xs font-medium tracking-tight transition-all text-left"
+            >
+              <span className="material-symbols-outlined text-[18px] text-indigo-400">help_outline</span>
+              <div className="flex flex-col">
+                <span className="font-semibold">¿Cómo funciona?</span>
+                <span className="text-[10px] text-indigo-400/80">Guía rápida paso a paso</span>
+              </div>
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* Bottom Rates & Profile */}

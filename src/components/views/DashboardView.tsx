@@ -336,6 +336,144 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return list.slice(0, 3);
   }, [debts, debtInstallments]);
 
+  // 1. ¿Cuánto dinero tengo en total? (Dinero Total Disponible)
+  // Suma consolidada de todas las cuentas bancarias y efectivo restando préstamos activos
+  const totalDisponible = isVes ? summary.patrimonio_ves : summary.patrimonio_usd;
+  const totalDisponibleSecondary = isVes ? summary.patrimonio_usd : summary.patrimonio_ves;
+  const totalCuentas = isVes ? summary.activos_ves : summary.activos_usd;
+  const totalDeudas = isVes ? summary.deudas_ves : summary.deudas_usd;
+
+  // 2. ¿Cuánto puedo gastar este mes? (Disponible para Gastar)
+  // Cuánto dinero libre te queda antes de alcanzar tu límite presupuestario o entrar en déficit
+  const disponibleParaGastar = useMemo(() => {
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+    const totalPresupuestoUsd = budgets.reduce((sum, b) => {
+      const bUsd =
+        b.moneda === 'USD'
+          ? b.monto_original || b.monto_limite
+          : b.monto_limite > 500 && activeUsdRate > 0
+          ? b.monto_limite / activeUsdRate
+          : b.monto_limite;
+      return sum + (bUsd || 0);
+    }, 0);
+
+    const hasBudget = totalPresupuestoUsd > 0;
+    const gastosMesUsd = summary.gastos_mes_usd;
+    const ingresosMesUsd = summary.ingresos_mes_usd;
+
+    let disponibleUsd = 0;
+    let techoUsd = 0;
+    let statusText = '';
+    let badgeText = '';
+    let isAlert = false;
+    let isGood = true;
+
+    if (hasBudget) {
+      techoUsd = totalPresupuestoUsd;
+      const budgetRestante = totalPresupuestoUsd - gastosMesUsd;
+      if (budgetRestante <= 0) {
+        disponibleUsd = 0;
+        statusText = 'Presupuesto mensual agotado';
+        badgeText = 'Límite alcanzado';
+        isAlert = true;
+        isGood = false;
+      } else {
+        disponibleUsd = budgetRestante;
+        const pctUsado = Math.min(100, Math.round((gastosMesUsd / totalPresupuestoUsd) * 100));
+        statusText = `Queda ${100 - pctUsado}% antes del límite`;
+        badgeText = pctUsado > 85 ? 'Presupuesto ajustado' : 'Bajo control';
+        isAlert = pctUsado > 85;
+        isGood = pctUsado <= 85;
+      }
+    } else {
+      // Sin presupuestos configurados: margen operativo antes de déficit mensual (Ingresos - Gastos)
+      techoUsd = ingresosMesUsd;
+      const margenUsd = ingresosMesUsd - gastosMesUsd;
+      if (margenUsd <= 0) {
+        disponibleUsd = 0;
+        statusText = ingresosMesUsd > 0 ? 'En déficit mensual' : 'Sin ingresos registrados este mes';
+        badgeText = ingresosMesUsd > 0 ? 'En déficit' : 'Sin margen';
+        isAlert = ingresosMesUsd > 0;
+        isGood = false;
+      } else {
+        disponibleUsd = margenUsd;
+        statusText = 'Margen libre antes de déficit';
+        badgeText = 'Superávit mensual';
+        isAlert = false;
+        isGood = true;
+      }
+    }
+
+    const disponibleDominant = isVes ? disponibleUsd * activeUsdRate : disponibleUsd;
+    const disponibleSecondary = isVes ? disponibleUsd : disponibleUsd * activeUsdRate;
+    const techoDominant = isVes ? techoUsd * activeUsdRate : techoUsd;
+
+    return {
+      disponibleDominant,
+      disponibleSecondary,
+      techoDominant,
+      statusText,
+      badgeText,
+      isAlert,
+      isGood,
+      hasBudget,
+    };
+  }, [budgets, summary, rates, isVes]);
+
+  // 3. ¿Qué debo pagar pronto? (Próximos Pagos a 15 días)
+  // Alerta clara de cuotas de préstamos o compras a crédito próximas a vencer, o aviso verde de "Al día: sin pagos urgentes"
+  const proximosPagos15Dias = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayDate = new Date(today);
+    const activeDebtMap = new Map<string, typeof debts[0]>();
+    debts.forEach((d) => {
+      if (d.estado === 'activa') activeDebtMap.set(d.id, d);
+    });
+
+    const urgentList: {
+      debt: typeof debts[0];
+      installment: typeof debtInstallments[0];
+      diffDays: number;
+      pendingAmount: number;
+    }[] = [];
+
+    debtInstallments.forEach((inst) => {
+      const debt = activeDebtMap.get(inst.debt_id);
+      if (debt && inst.estado !== 'pagada') {
+        const dueDate = new Date(inst.fecha_vencimiento);
+        const diffDays = Math.ceil((dueDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= 15) {
+          const pending = Math.max(0, (inst.monto || 0) - (inst.monto_pagado || 0));
+          urgentList.push({ debt, installment: inst, diffDays, pendingAmount: pending });
+        }
+      }
+    });
+
+    urgentList.sort((a, b) => a.diffDays - b.diffDays);
+
+    let totalUsd = 0;
+    urgentList.forEach((item) => {
+      totalUsd += convert(item.pendingAmount, item.debt.moneda, 'USD');
+    });
+
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+    const totalDominant = isVes ? totalUsd * activeUsdRate : totalUsd;
+    const totalSecondary = isVes ? totalUsd : totalUsd * activeUsdRate;
+
+    const overdueCount = urgentList.filter((item) => item.diffDays < 0).length;
+    const dueTodayCount = urgentList.filter((item) => item.diffDays === 0).length;
+
+    return {
+      hasUrgent: urgentList.length > 0,
+      urgentList,
+      totalDominant,
+      totalSecondary,
+      overdueCount,
+      dueTodayCount,
+      nearest: urgentList[0] || null,
+    };
+  }, [debts, debtInstallments, convert, rates, isVes]);
+
   const currentMonthName = useMemo(() => {
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const now = new Date();
@@ -410,6 +548,81 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="text-[11px] text-neutral-500 mt-0.5">
               Ritmo proyectado: {ritmoProyectado}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 🎯 Panel Principal Simplificado: 3 Preguntas Esenciales */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium text-neutral-200">
+              Panel Simplificado • 3 Preguntas Esenciales
+            </h2>
+            <p className="text-xs text-neutral-500">
+              Diagnóstico claro y directo para la toma de decisiones financieras
+            </p>
+          </div>
+        </div>
+
+        {/* Clean Restrained Sub-Stats (No loud cards - matches screenshot layout) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-neutral-800/40">
+          {/* 1. ¿Cuánto dinero tengo en total? */}
+          <div>
+            <div className="text-xs text-neutral-500 mb-1">
+              ¿Cuánto dinero tengo en total?
+            </div>
+            <div className="text-lg font-medium text-neutral-200 font-mono">
+              {formatCurrency(totalDisponible, preferredViewCurrency)}
+            </div>
+            <div className="text-[11px] text-neutral-500 mt-0.5">
+              ≈ {fmtSecondary(totalDisponibleSecondary)} {isVes ? 'USD' : 'VES'} • Total disponible neto
+            </div>
+          </div>
+
+          {/* 2. ¿Cuánto puedo gastar este mes? */}
+          <div>
+            <div className="text-xs text-neutral-500 mb-1">
+              ¿Cuánto puedo gastar este mes?
+            </div>
+            <div className="text-lg font-medium text-neutral-200 font-mono">
+              {formatCurrency(disponibleParaGastar.disponibleDominant, preferredViewCurrency)}
+            </div>
+            <div className="text-[11px] text-neutral-500 mt-0.5">
+              ≈ {fmtSecondary(disponibleParaGastar.disponibleSecondary)} {isVes ? 'USD' : 'VES'} • {disponibleParaGastar.statusText}
+            </div>
+          </div>
+
+          {/* 3. ¿Qué debo pagar pronto? */}
+          <div
+            onClick={() => onNavigateTab('debts')}
+            className="cursor-pointer group"
+          >
+            <div className="text-xs text-neutral-500 mb-1 group-hover:text-neutral-400 transition-colors">
+              ¿Qué debo pagar pronto?
+            </div>
+            {proximosPagos15Dias.hasUrgent ? (
+              <>
+                <div className="text-lg font-medium text-neutral-200 font-mono">
+                  {formatCurrency(proximosPagos15Dias.totalDominant, preferredViewCurrency)}{' '}
+                  <span className="text-xs text-rose-400 font-sans">
+                    ({proximosPagos15Dias.overdueCount > 0 ? `${proximosPagos15Dias.overdueCount} vencida` : `${proximosPagos15Dias.urgentList.length} cuotas`})
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                  ≈ {fmtSecondary(proximosPagos15Dias.totalSecondary)} {isVes ? 'USD' : 'VES'} • Próximo: {proximosPagos15Dias.nearest?.debt.nombre} ({proximosPagos15Dias.nearest && proximosPagos15Dias.nearest.diffDays < 0 ? `Vencida ${Math.abs(proximosPagos15Dias.nearest.diffDays)}d` : proximosPagos15Dias.nearest?.diffDays === 0 ? 'Vence hoy' : `en ${proximosPagos15Dias.nearest?.diffDays}d`})
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-medium text-emerald-400 font-mono">
+                  Al día: sin pagos urgentes
+                </div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                  Próximos 15 días • Sin cuotas pendientes
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>
