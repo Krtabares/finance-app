@@ -423,7 +423,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const isQuincena = spendPeriod === 'quincena';
     const periodShort = isQuincena ? (commitments.fortnightNumber === 1 ? '1ra Q' : '2da Q') : 'Mes';
 
-    if (hasPendingFijos) {
+    const hasDeficit = commitments.hasDeficit;
+    const deficitUsd = commitments.deficitLiquidezUsd;
+    const deficitText = isVes
+      ? `Bs. ${(deficitUsd * activeUsdRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}`
+      : `$${deficitUsd.toFixed(2)}`;
+
+    if (hasDeficit) {
+      statusText = `Déficit en cuentas: faltan ${deficitText} para cubrir fijos (${periodShort}) • Clic para desglose`;
+      badgeText = 'Déficit de liquidez';
+      isAlert = true;
+      isGood = false;
+    } else if (hasPendingFijos) {
       statusText = `Apartado fijos (${periodShort}): ${fijosText} (${pendingCount} pendientes) • Clic para desglose`;
       badgeText = libreUsd > 0 ? 'Fijos apartados' : 'Margen ajustado';
       isAlert = libreUsd <= 0;
@@ -957,122 +968,73 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           </div>
 
-          {/* Widget de Gastos Fijos y Compromisos del Mes (Alquiler, Servicios, etc.) */}
+          {/* Widget de Gastos Fijos del Mes */}
           <div className="space-y-3 pt-4 border-t border-neutral-800/40" id="gastos-fijos-widget">
             <div className="flex items-center justify-between pb-1">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-neutral-400">home_work</span>
-                  <h2 className="text-sm font-medium text-neutral-200">Gastos Fijos del Mes</h2>
-                </div>
-                <div className="text-[11px] text-amber-400/90 mt-0.5 font-mono">
-                  Por pagar este mes: {formatCurrency(isVes ? commitments.totalCompromisosPendientesUsd * activeUsdRate : commitments.totalCompromisosPendientesUsd, preferredViewCurrency)}
-                </div>
-              </div>
+              <h2 className="text-sm font-medium text-neutral-200">Gastos Fijos del Mes</h2>
               <button
+                type="button"
                 onClick={() => setIsBreakdownOpen(true)}
-                className="text-xs font-mono text-neutral-300 hover:text-white transition-colors bg-neutral-900 border border-neutral-800 hover:border-neutral-700 px-2.5 py-1 rounded-md flex items-center gap-1"
-                title="Ver lista exacta y auditoría de todos los gastos que componen este monto"
+                className="text-xs font-mono text-neutral-500 hover:text-neutral-300 transition-colors cursor-pointer"
+                title="Ver auditoría y desglose de gastos fijos"
               >
-                <span>Ver auditoría ({commitments.itemsPendientes.length})</span>
-                <span className="material-symbols-outlined text-[14px]">visibility</span>
+                {formatCurrency(
+                  isVes
+                    ? (commitments.totalPresupuestoFijoUsd + commitments.totalCuotasDeudasMesUsd) * activeUsdRate
+                    : (commitments.totalPresupuestoFijoUsd + commitments.totalCuotasDeudasMesUsd),
+                  preferredViewCurrency
+                )}
               </button>
             </div>
 
-            {commitments.items.length > 0 ? (
-              <div className="space-y-2">
-                {commitments.items.map((item) => {
-                  const isPagado = item.estado === 'pagado';
-                  const isParcial = item.estado === 'parcial';
-                  const isPendiente = item.estado === 'pendiente';
+            <div className="space-y-3 text-xs">
+              {commitments.items.length > 0 ? (
+                commitments.items.map((item, idx) => {
+                  const pct = Math.min(100, Math.max(0, Math.round(item.porcentajePagado)));
+                  const barColor =
+                    idx === 0
+                      ? 'bg-neutral-300'
+                      : idx === 1
+                        ? 'bg-neutral-400'
+                        : idx === 2
+                          ? 'bg-neutral-500'
+                          : 'bg-neutral-600';
 
-                  const itemPendienteDominant = isVes
-                    ? item.montoPendienteUsd * activeUsdRate
-                    : item.montoPendienteUsd;
-                  const itemTotalDominant = isVes
+                  const itemAmount = isVes
                     ? item.montoTotalUsd * activeUsdRate
                     : item.montoTotalUsd;
 
                   return (
                     <div
                       key={item.id}
-                      onClick={() => {
-                        if (item.tipo === 'cuota_deuda') {
-                          onNavigateTab('debts');
-                        } else {
-                          onNavigateTab('budgets');
-                        }
-                      }}
-                      className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${
-                        isPendiente
-                          ? 'border-amber-900/40 bg-amber-950/10 hover:border-amber-700/60'
-                          : isParcial
-                            ? 'border-blue-900/40 bg-blue-950/10 hover:border-blue-700/60'
-                            : 'border-neutral-800/40 bg-neutral-900/20 hover:border-neutral-700/60'
-                      }`}
+                      onClick={() => setIsBreakdownOpen(true)}
+                      className="cursor-pointer group"
+                      title={`${item.nombre}: ${pct}% cubierto • Haz clic para ver auditoría`}
                     >
-                      <div className="min-w-0 pr-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-neutral-200 truncate group-hover:text-white">
-                            {item.nombre}
-                          </span>
-                          <span
-                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                              isPagado
-                                ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
-                                : isParcial
-                                  ? 'bg-blue-950/40 text-blue-400 border border-blue-800/40'
-                                  : 'bg-amber-950/40 text-amber-400 border border-amber-800/40'
-                            }`}
-                          >
-                            {isPagado ? '✓ Pagado' : isParcial ? '🟡 Parcial' : '⏳ Falta pagar'}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-neutral-500 mt-1 flex items-center gap-1.5">
-                          <span>
-                            {isPagado
-                              ? 'Completado este mes'
-                              : `Abonado $${item.montoPagadoUsd.toFixed(2)} de $${item.montoTotalUsd.toFixed(2)}`}
-                          </span>
-                        </div>
-                        {/* Micro barra de progreso */}
-                        <div className="h-1 w-28 bg-neutral-800 rounded-full overflow-hidden mt-1.5">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isPagado ? 'bg-emerald-500' : isParcial ? 'bg-blue-500' : 'bg-amber-500'
-                            }`}
-                            style={{ width: `${Math.min(100, item.porcentajePagado)}%` }}
-                          />
-                        </div>
+                      <div className="flex justify-between text-neutral-400 mb-1 group-hover:text-neutral-300 transition-colors">
+                        <span>{item.nombre}</span>
+                        <span className="font-mono text-neutral-300">
+                          {pct}% • {formatCurrency(itemAmount, preferredViewCurrency)}
+                        </span>
                       </div>
-
-                      <div className="text-right font-mono text-xs flex-shrink-0">
-                        <div className={isPagado ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
-                          {isPagado ? (
-                            'Al día'
-                          ) : (
-                            <span>Falta: {formatCurrency(itemPendienteDominant, preferredViewCurrency)}</span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-neutral-500 mt-0.5">
-                          Total: {formatCurrency(itemTotalDominant, preferredViewCurrency)}
-                        </div>
+                      <div className="h-1 w-full bg-neutral-900 rounded-full overflow-hidden">
+                        <div
+                          className={`${barColor} h-full rounded-full transition-all duration-500`}
+                          style={{ width: `${pct}%` }}
+                        ></div>
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            ) : (
-              <div
-                onClick={() => onNavigateTab('budgets')}
-                className="p-3.5 rounded-lg border border-dashed border-neutral-800/70 hover:border-neutral-700/80 bg-neutral-900/10 text-center cursor-pointer transition-all"
-              >
-                <div className="text-xs text-neutral-400">Sin gastos fijos configurados aún</div>
-                <div className="text-[11px] text-neutral-600 mt-0.5">
-                  Fija presupuestos para Alquiler, Servicios, etc. para verlos aquí
+                })
+              ) : (
+                <div
+                  onClick={() => onNavigateTab('budgets')}
+                  className="py-6 text-center text-xs text-neutral-500 cursor-pointer hover:text-neutral-400 transition-colors"
+                >
+                  No hay gastos fijos registrados en este período.
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Widget de Próximas Cuotas de Préstamos / Deudas */}
@@ -1415,31 +1377,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
 
             {/* Sección 3: Fórmula y Resultado Final */}
-            <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-800/40 space-y-2">
+            <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-800/40 space-y-2.5">
               <div className="flex items-center justify-between text-xs font-sans">
                 <span className="text-neutral-400">
-                  {spendPeriod === 'quincena' ? 'Presupuesto Variable de la Quincena:' : 'Total Presupuestado en el Mes:'}
+                  {spendPeriod === 'quincena' ? 'Margen según Presupuesto Variable:' : 'Margen según Presupuestos Variables:'}
                 </span>
                 <span className="font-mono text-neutral-200">
                   {formatCurrency(
                     isVes
-                      ? (spendPeriod === 'quincena' ? commitments.totalPresupuestoVariableUsd : commitments.totalPresupuestoGlobalUsd) * activeUsdRate
-                      : (spendPeriod === 'quincena' ? commitments.totalPresupuestoVariableUsd : commitments.totalPresupuestoGlobalUsd),
+                      ? (spendPeriod === 'quincena' ? commitments.totalVariableRestanteUsd : commitments.totalVariableRestanteUsd) * activeUsdRate
+                      : (spendPeriod === 'quincena' ? commitments.totalVariableRestanteUsd : commitments.totalVariableRestanteUsd),
                     preferredViewCurrency
                   )}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs font-sans">
-                <span className="text-neutral-400">
-                  {spendPeriod === 'quincena' ? 'Gastos variables hechos en esta quincena:' : 'Gastos ya realizados este mes:'}
-                </span>
-                <span className="font-mono text-neutral-300">
-                  -{formatCurrency(
-                    isVes
-                      ? (spendPeriod === 'quincena' ? commitments.totalVariableGastadoUsd : commitments.totalGastosGlobalUsd) * activeUsdRate
-                      : (spendPeriod === 'quincena' ? commitments.totalVariableGastadoUsd : commitments.totalGastosGlobalUsd),
-                    preferredViewCurrency
-                  )}
+                <span className="text-neutral-400">Dinero Total en Cuentas y Efectivo:</span>
+                <span className="font-mono text-neutral-200">
+                  {formatCurrency(isVes ? totalCuentas : commitments.dineroLiquidezEnCuentasUsd, preferredViewCurrency)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs font-sans">
@@ -1450,11 +1405,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   -{formatCurrency(isVes ? commitments.totalCompromisosPendientesUsd * activeUsdRate : commitments.totalCompromisosPendientesUsd, preferredViewCurrency)}
                 </span>
               </div>
+
+              {commitments.hasDeficit && (
+                <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-800/40 text-xs text-rose-300 flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-rose-400 mt-0.5 flex-shrink-0">warning</span>
+                  <div>
+                    <div className="font-semibold text-rose-200">Déficit de Liquidez</div>
+                    <div className="text-[11px] text-rose-300/80 mt-0.5">
+                      Tus cuentas tienen {formatCurrency(isVes ? totalCuentas : commitments.dineroLiquidezEnCuentasUsd, preferredViewCurrency)} pero tus compromisos pendientes suman {formatCurrency(isVes ? commitments.totalCompromisosPendientesUsd * activeUsdRate : commitments.totalCompromisosPendientesUsd, preferredViewCurrency)}. Faltan {formatCurrency(isVes ? commitments.deficitLiquidezUsd * activeUsdRate : commitments.deficitLiquidezUsd, preferredViewCurrency)} para cubrir tus fijos, por lo que tu dinero libre real es $0.00 hasta registrar nuevos ingresos.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-2 border-t border-blue-800/40 flex items-center justify-between">
                 <div>
                   <div className="text-blue-300 font-sans font-semibold text-xs flex items-center gap-1.5">
                     <span>
-                      {spendPeriod === 'quincena' ? 'Dinero Libre para esta Quincena:' : 'Dinero Realmente Libre para gastar:'}
+                      {spendPeriod === 'quincena' ? 'Dinero Realmente Libre (Quincena):' : 'Dinero Realmente Libre:'}
                     </span>
                     {spendPeriod === 'quincena' && commitments.daysRemainingInPeriod && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono">
@@ -1463,12 +1431,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     )}
                   </div>
                   <div className="text-[11px] text-neutral-400 font-sans">
-                    {spendPeriod === 'quincena'
-                      ? `Margen libre para los días restantes de la ${commitments.fortnightLabel || 'quincena'}`
-                      : 'Margen libre del presupuesto tras apartar tus fijos'}
+                    {commitments.hasDeficit
+                      ? 'Sin saldo libre: tus cuentas no cubren los fijos pendientes'
+                      : spendPeriod === 'quincena'
+                        ? `Disponible para gastar libre en esta ${commitments.fortnightLabel || 'quincena'}`
+                        : 'Margen libre del presupuesto tras apartar tus fijos'}
                   </div>
                 </div>
-                <div className="text-white font-bold font-mono text-base">
+                <div className={`font-bold font-mono text-base ${disponibleParaGastar.isAlert ? 'text-amber-400' : 'text-white'}`}>
                   {formatCurrency(disponibleParaGastar.disponibleDominant, preferredViewCurrency)}
                 </div>
               </div>

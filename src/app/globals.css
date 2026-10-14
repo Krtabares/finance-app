@@ -72,20 +72,26 @@ a {
 }
 
 
-html,
+html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   padding: 0;
-  max-width: 100vw;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
   background-color: #090a0d;
   color: #ededf0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-}
-
-::-webkit-scrollbar {
-  display: none;
 }
 
 .font-display {
@@ -108,20 +114,27 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar - Clean & Functional */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  display: block;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-main);
+  background: #090a0d;
 }
 ::-webkit-scrollbar-thumb {
-  background: #25334d;
-  border-radius: var(--radius-full);
+  background: #262626;
+  border-radius: 9999px;
+  border: 2px solid #090a0d;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #374b70;
+  background: #404040;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #262626 #090a0d;
 }
 
 /* Glassmorphism helpers */

@@ -181,7 +181,9 @@ export interface MonthlyCommitmentsSummary {
   // Dinero Realmente Libre
   dineroRealmenteLibreUsd: number;
   dineroLiquidezEnCuentasUsd: number;
+  liquidezTrasFijosUsd: number;
   deficitLiquidezUsd: number;
+  hasDeficit: boolean;
 
   // Items de compromisos detallados (fijos pendientes o en progreso)
   items: FixedCommitmentItem[];
@@ -449,10 +451,15 @@ export const calculateMonthlyCommitments = (params: {
     ? totalVariableRestanteUsd
     : Math.max(0, presupuestoRestanteGlobalUsd - totalFijoPendienteUsd);
 
+  // Liquidez real en cuentas tras apartar los compromisos fijos pendientes
+  const liquidezTrasFijosUsd = Math.max(0, totalAccountsUsd - totalCompromisosPendientesUsd);
   const deficitLiquidezUsd = Math.max(0, totalCompromisosPendientesUsd - totalAccountsUsd);
+  const hasDeficit = deficitLiquidezUsd > 0.01;
 
-  // Dinero realmente libre para el día a día según presupuesto
-  const dineroRealmenteLibreUsd = margenPresupuestoLibreUsd;
+  // Dinero realmente libre para el día a día:
+  // Es el mínimo entre el margen presupuestario asignado y la liquidez real disponible en cuentas tras apartar fijos.
+  // Si tus cuentas no cubren tus fijos pendientes, el dinero realmente libre es $0.00 (no puedes gastar lo que no tienes).
+  const dineroRealmenteLibreUsd = Math.max(0, Math.min(margenPresupuestoLibreUsd, liquidezTrasFijosUsd));
 
   const itemsPendientes = items
     .filter((i) => i.montoPendienteUsd > 0.01)
@@ -481,7 +488,9 @@ export const calculateMonthlyCommitments = (params: {
     margenPresupuestoLibreUsd,
     dineroRealmenteLibreUsd,
     dineroLiquidezEnCuentasUsd: totalAccountsUsd,
+    liquidezTrasFijosUsd,
     deficitLiquidezUsd,
+    hasDeficit,
     items,
     itemsPendientes,
     itemsCompletados,

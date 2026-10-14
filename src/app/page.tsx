@@ -93,7 +93,7 @@ function FinanceAppContent() {
   };
 
   return (
-    <div className="bg-[#090a0d] min-h-screen flex selection:bg-neutral-800 selection:text-white">
+    <div className="bg-[#090a0d] min-h-screen w-full flex selection:bg-neutral-800 selection:text-white">
       {/* Minimalist Clean Sidebar */}
       <Sidebar
         currentTab={currentTab}
@@ -103,14 +103,14 @@ function FinanceAppContent() {
       />
 
       {/* Main Content Layout */}
-      <div className="pl-64 flex flex-col flex-1 min-h-screen bg-[#090a0d]">
+      <div className="pl-64 flex flex-col flex-1 min-h-screen w-full min-w-0 bg-[#090a0d]">
         <Header
           title={getPageTitle()}
           onOpenNewTransaction={() => setIsTransactionModalOpen(true)}
           onOpenGuide={() => setIsGuideOpen(true)}
         />
 
-        <main className="flex-1 px-8 py-8 lg:px-10 lg:py-10 max-w-[1360px] w-full mx-auto space-y-12">
+        <main className="flex-1 px-8 py-8 lg:px-10 lg:py-10 max-w-[1360px] w-full mx-auto space-y-12 pb-20">
           {/* Renderizado de vista seleccionada */}
           {currentTab === 'dashboard' && (
             <DashboardView
