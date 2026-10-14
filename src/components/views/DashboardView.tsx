@@ -149,10 +149,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     summary.ahorro_tasa_mes >= 25
       ? 'Saludable'
       : summary.ahorro_tasa_mes > 0
-      ? 'Moderado'
-      : summary.ingresos_mes_usd === 0 && summary.gastos_mes_usd === 0
-      ? 'Sin movimientos'
-      : 'Ajustado';
+        ? 'Moderado'
+        : summary.ingresos_mes_usd === 0 && summary.gastos_mes_usd === 0
+          ? 'Sin movimientos'
+          : 'Ajustado';
 
   // Flujo Financiero dinámico (últimos 5 meses) calculado en USD y proyectado en BS si se requiere
   const cashflowData = useMemo(() => {
@@ -337,11 +337,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [debts, debtInstallments]);
 
   // 1. ¿Cuánto dinero tengo en total? (Dinero Total Disponible)
-  // Suma consolidada de todas las cuentas bancarias y efectivo restando préstamos activos
-  const totalDisponible = isVes ? summary.patrimonio_ves : summary.patrimonio_usd;
-  const totalDisponibleSecondary = isVes ? summary.patrimonio_usd : summary.patrimonio_ves;
+  // Suma consolidada de todas las cuentas bancarias y efectivo (sin restar deudas)
   const totalCuentas = isVes ? summary.activos_ves : summary.activos_usd;
-  const totalDeudas = isVes ? summary.deudas_ves : summary.deudas_usd;
+  const totalCuentasSecondary = isVes ? summary.activos_usd : summary.activos_ves;
 
   // 2. ¿Cuánto puedo gastar este mes? (Disponible para Gastar)
   // Cuánto dinero libre te queda antes de alcanzar tu límite presupuestario o entrar en déficit
@@ -352,8 +350,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         b.moneda === 'USD'
           ? b.monto_original || b.monto_limite
           : b.monto_limite > 500 && activeUsdRate > 0
-          ? b.monto_limite / activeUsdRate
-          : b.monto_limite;
+            ? b.monto_limite / activeUsdRate
+            : b.monto_limite;
       return sum + (bUsd || 0);
     }, 0);
 
@@ -498,11 +496,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 ≈ {secondarySymbol}{secondaryFormatted} {isVes ? 'USD' : 'VES'}
               </span>
               <span
-                className={`text-xs px-2 py-0.5 rounded font-mono font-medium ${
-                  monthComparison.isPositive
+                className={`text-xs px-2 py-0.5 rounded font-mono font-medium ${monthComparison.isPositive
                     ? 'bg-emerald-500/10 text-emerald-400'
                     : 'bg-rose-500/10 text-rose-400'
-                }`}
+                  }`}
               >
                 {monthComparison.text}
               </span>
@@ -516,113 +513,105 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Clean Restrained Sub-Stats (No loud cards) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-neutral-800/40">
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">Ingresos del Mes</div>
-            <div className="text-lg font-medium text-neutral-200 font-mono">
-              {formatCurrency(ingresosMes, preferredViewCurrency)}
+        {/* 2 Columnas de Métricas Superiores: Resumen del Mes y Panel Simplificado */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 pt-6 border-t border-neutral-800/40">
+          {/* Columna Izquierda: Resumen del Mes */}
+          <div className="space-y-4">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+              Resumen del Mes
             </div>
-            <div className="text-[11px] text-neutral-500 mt-0.5">
-              ≈ {fmtSecondary(secondaryIngresos)} {isVes ? 'USD' : 'VES'} • {fuentesIngreso}{' '}
-              {fuentesIngreso === 1 ? 'fuente' : 'fuentes'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">Gastos del Mes</div>
-            <div className="text-lg font-medium text-neutral-200 font-mono">
-              {formatCurrency(gastosMes, preferredViewCurrency)}
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-0.5">
-              ≈ {fmtSecondary(secondaryGastos)} {isVes ? 'USD' : 'VES'} • {budgetStatus}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">Margen de Ahorro</div>
-            <div className="text-lg font-medium text-neutral-200 font-mono">
-              {summary.ahorro_tasa_mes}%{' '}
-              <span className="text-xs text-neutral-400 font-sans">
-                ({formatCurrency(ahorroMontoDominant, preferredViewCurrency)})
-              </span>
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-0.5">
-              Ritmo proyectado: {ritmoProyectado}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 🎯 Panel Principal Simplificado: 3 Preguntas Esenciales */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-medium text-neutral-200">
-              Panel Simplificado • 3 Preguntas Esenciales
-            </h2>
-            <p className="text-xs text-neutral-500">
-              Diagnóstico claro y directo para la toma de decisiones financieras
-            </p>
-          </div>
-        </div>
-
-        {/* Clean Restrained Sub-Stats (No loud cards - matches screenshot layout) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-neutral-800/40">
-          {/* 1. ¿Cuánto dinero tengo en total? */}
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">
-              ¿Cuánto dinero tengo en total?
-            </div>
-            <div className="text-lg font-medium text-neutral-200 font-mono">
-              {formatCurrency(totalDisponible, preferredViewCurrency)}
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-0.5">
-              ≈ {fmtSecondary(totalDisponibleSecondary)} {isVes ? 'USD' : 'VES'} • Total disponible neto
-            </div>
-          </div>
-
-          {/* 2. ¿Cuánto puedo gastar este mes? */}
-          <div>
-            <div className="text-xs text-neutral-500 mb-1">
-              ¿Cuánto puedo gastar este mes?
-            </div>
-            <div className="text-lg font-medium text-neutral-200 font-mono">
-              {formatCurrency(disponibleParaGastar.disponibleDominant, preferredViewCurrency)}
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-0.5">
-              ≈ {fmtSecondary(disponibleParaGastar.disponibleSecondary)} {isVes ? 'USD' : 'VES'} • {disponibleParaGastar.statusText}
-            </div>
-          </div>
-
-          {/* 3. ¿Qué debo pagar pronto? */}
-          <div
-            onClick={() => onNavigateTab('debts')}
-            className="cursor-pointer group"
-          >
-            <div className="text-xs text-neutral-500 mb-1 group-hover:text-neutral-400 transition-colors">
-              ¿Qué debo pagar pronto?
-            </div>
-            {proximosPagos15Dias.hasUrgent ? (
-              <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <div className="text-xs text-neutral-500 mb-1">Ingresos del Mes</div>
                 <div className="text-lg font-medium text-neutral-200 font-mono">
-                  {formatCurrency(proximosPagos15Dias.totalDominant, preferredViewCurrency)}{' '}
-                  <span className="text-xs text-rose-400 font-sans">
-                    ({proximosPagos15Dias.overdueCount > 0 ? `${proximosPagos15Dias.overdueCount} vencida` : `${proximosPagos15Dias.urgentList.length} cuotas`})
+                  {formatCurrency(ingresosMes, preferredViewCurrency)}
+                </div>
+                <div className="text-[11px] text-neutral-500 mt-0.5">
+                  ≈ {fmtSecondary(secondaryIngresos)} {isVes ? 'USD' : 'VES'} • {fuentesIngreso}{' '}
+                  {fuentesIngreso === 1 ? 'fuente' : 'fuentes'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-neutral-500 mb-1">Gastos del Mes</div>
+                <div className="text-lg font-medium text-neutral-200 font-mono">
+                  {formatCurrency(gastosMes, preferredViewCurrency)}
+                </div>
+                <div className="text-[11px] text-neutral-500 mt-0.5">
+                  ≈ {fmtSecondary(secondaryGastos)} {isVes ? 'USD' : 'VES'} • {budgetStatus}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-neutral-500 mb-1">Margen de Ahorro</div>
+                <div className="text-lg font-medium text-neutral-200 font-mono">
+                  {summary.ahorro_tasa_mes}%{' '}
+                  <span className="text-xs text-neutral-400 font-sans">
+                    ({formatCurrency(ahorroMontoDominant, preferredViewCurrency)})
                   </span>
                 </div>
-                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
-                  ≈ {fmtSecondary(proximosPagos15Dias.totalSecondary)} {isVes ? 'USD' : 'VES'} • Próximo: {proximosPagos15Dias.nearest?.debt.nombre} ({proximosPagos15Dias.nearest && proximosPagos15Dias.nearest.diffDays < 0 ? `Vencida ${Math.abs(proximosPagos15Dias.nearest.diffDays)}d` : proximosPagos15Dias.nearest?.diffDays === 0 ? 'Vence hoy' : `en ${proximosPagos15Dias.nearest?.diffDays}d`})
+                <div className="text-[11px] text-neutral-500 mt-0.5">
+                  Ritmo: {ritmoProyectado}
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="text-lg font-medium text-emerald-400 font-mono">
-                  Al día: sin pagos urgentes
+              </div>
+            </div>
+          </div>
+
+          {/* Columna Derecha: Panel Simplificado (3 Preguntas Esenciales) */}
+          <div className="space-y-4 lg:border-l lg:border-neutral-800/40 lg:pl-12">
+            <div className="text-[11px] pt-6 font-medium uppercase tracking-wider text-neutral-500">
+              Panel Simplificado • 3 Preguntas
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 1. ¿Cuánto dinero tengo en total? */}
+              <div>
+                <div className="text-xs text-neutral-500 mb-1">¿Cuánto tengo en total?</div>
+                <div className="text-lg font-medium text-neutral-200 font-mono">
+                  {formatCurrency(totalCuentas, preferredViewCurrency)}
                 </div>
-                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
-                  Próximos 15 días • Sin cuotas pendientes
+                <div className="text-[11px] text-neutral-500 mt-0.5">
+                  ≈ {fmtSecondary(totalCuentasSecondary)} {isVes ? 'USD' : 'VES'} • Cuentas y efectivo
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* 2. ¿Cuánto puedo gastar este mes? */}
+              <div>
+                <div className="text-xs text-neutral-500 mb-1">¿Cuánto puedo gastar?</div>
+                <div className="text-lg font-medium text-neutral-200 font-mono">
+                  {formatCurrency(disponibleParaGastar.disponibleDominant, preferredViewCurrency)}
+                </div>
+                <div className="text-[11px] text-neutral-500 mt-0.5">
+                  ≈ {fmtSecondary(disponibleParaGastar.disponibleSecondary)} {isVes ? 'USD' : 'VES'} • {disponibleParaGastar.statusText}
+                </div>
+              </div>
+
+              {/* 3. ¿Qué debo pagar pronto? */}
+              <div onClick={() => onNavigateTab('debts')} className="cursor-pointer group">
+                <div className="text-xs text-neutral-500 mb-1 group-hover:text-neutral-400 transition-colors">
+                  ¿Qué debo pagar pronto?
+                </div>
+                {proximosPagos15Dias.hasUrgent ? (
+                  <>
+                    <div className="text-lg font-medium text-neutral-200 font-mono">
+                      {formatCurrency(proximosPagos15Dias.totalDominant, preferredViewCurrency)}{' '}
+                      <span className="text-xs text-rose-400 font-sans">
+                        ({proximosPagos15Dias.overdueCount > 0 ? `${proximosPagos15Dias.overdueCount} vencida` : `${proximosPagos15Dias.urgentList.length} cuotas`})
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                      ≈ {fmtSecondary(proximosPagos15Dias.totalSecondary)} {isVes ? 'USD' : 'VES'} • {proximosPagos15Dias.nearest?.debt.nombre} ({proximosPagos15Dias.nearest && proximosPagos15Dias.nearest.diffDays < 0 ? `Vencida ${Math.abs(proximosPagos15Dias.nearest.diffDays)}d` : proximosPagos15Dias.nearest?.diffDays === 0 ? 'Vence hoy' : `en ${proximosPagos15Dias.nearest?.diffDays}d`})
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-lg font-medium text-emerald-400 font-mono">
+                      Al día: sin pagos
+                    </div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                      Próximos 15 días • Sin cuotas
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -803,10 +792,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     acc.moneda === 'VES'
                       ? 'VES'
                       : acc.moneda === 'USD'
-                      ? 'USD'
-                      : acc.moneda === 'USDT'
-                      ? 'USDT'
-                      : 'CASH';
+                        ? 'USD'
+                        : acc.moneda === 'USDT'
+                          ? 'USDT'
+                          : 'CASH';
 
                   return (
                     <div
@@ -824,10 +813,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {acc.tipo === 'banco'
                             ? 'Cuenta Bancaria'
                             : acc.tipo === 'cripto'
-                            ? 'Criptoactivos'
-                            : acc.tipo === 'efectivo'
-                            ? 'Custodia Física'
-                            : 'Billetera Digital'}
+                              ? 'Criptoactivos'
+                              : acc.tipo === 'efectivo'
+                                ? 'Custodia Física'
+                                : 'Billetera Digital'}
                         </span>
                       </div>
                       <div className="text-right font-mono text-xs flex-shrink-0">
@@ -908,11 +897,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       key={installment.id}
                       onClick={() => onNavigateTab('debts')}
-                      className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${
-                        isOverdue
+                      className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${isOverdue
                           ? 'border-rose-900/60 bg-rose-950/15 hover:border-rose-700/60'
                           : 'border-neutral-800/40 bg-neutral-900/20 hover:border-neutral-700/60'
-                      }`}
+                        }`}
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -929,15 +917,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               isOverdue
                                 ? 'text-rose-400 font-medium'
                                 : isToday
-                                ? 'text-amber-400 font-medium'
-                                : 'text-neutral-400'
+                                  ? 'text-amber-400 font-medium'
+                                  : 'text-neutral-400'
                             }
                           >
                             {isOverdue
                               ? `Vencida (${Math.abs(diffDays)}d)`
                               : isToday
-                              ? 'Vence hoy'
-                              : `En ${diffDays} días`}
+                                ? 'Vence hoy'
+                                : `En ${diffDays} días`}
                           </span>
                           <span>•</span>
                           <span className="font-mono">{installment.fecha_vencimiento}</span>
@@ -990,10 +978,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     idx === 0
                       ? 'bg-neutral-300'
                       : idx === 1
-                      ? 'bg-neutral-400'
-                      : idx === 2
-                      ? 'bg-neutral-500'
-                      : 'bg-neutral-600';
+                        ? 'bg-neutral-400'
+                        : idx === 2
+                          ? 'bg-neutral-500'
+                          : 'bg-neutral-600';
 
                   return (
                     <div key={item.name}>
