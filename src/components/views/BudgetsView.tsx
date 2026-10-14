@@ -5,6 +5,7 @@ import { useFinance } from '@/context/FinanceContext';
 import { formatCurrency, parseTransactionDate } from '@/lib/formatters';
 import { BudgetModal } from '@/components/modals/BudgetModal';
 import { Category, Budget } from '@/types/finance';
+import { isCategoryFixed, getStoredFixedOverrides, setStoredFixedOverride } from '@/lib/commitments';
 import styles from './BudgetsView.module.css';
 
 export const BudgetsView: React.FC = () => {
@@ -25,6 +26,8 @@ export const BudgetsView: React.FC = () => {
   const [viewCurrency, setViewCurrency] = useState<'VES' | 'USD'>(preferredViewCurrency || 'VES');
   const [sortBy, setSortBy] = useState<'percent' | 'spent' | 'name'>('percent');
   const [filterOverOnly, setFilterOverOnly] = useState(false);
+  const [fixedFilter, setFixedFilter] = useState<'all' | 'fixed' | 'variable'>('all');
+  const [fixedOverrides, setFixedOverrides] = useState<Record<string, boolean>>({});
 
   // New category inline form state
   const [newCatNombre, setNewCatNombre] = useState('');
@@ -34,6 +37,18 @@ export const BudgetsView: React.FC = () => {
 
   useEffect(() => {
     setMounted(true);
+    setFixedOverrides(getStoredFixedOverrides());
+
+    const handleOverridesChange = () => {
+      setFixedOverrides(getStoredFixedOverrides());
+    };
+    window.addEventListener('finance_fixed_categories_changed', handleOverridesChange);
+    return () => {
+      window.removeEventListener('finance_fixed_categories_changed', handleOverridesChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (preferredViewCurrency) {
       setViewCurrency(preferredViewCurrency);
     }
@@ -204,12 +219,16 @@ export const BudgetsView: React.FC = () => {
         }
       });
 
+      const cat = categories.find((c) => c.id === b.category_id);
+      const isFixed = isCategoryFixed(cat, fixedOverrides);
+
       const porcentaje = limiteUsd > 0 ? (gastadoUsd / limiteUsd) * 100 : 0;
       const restanteUsd = Math.max(0, limiteUsd - gastadoUsd);
       const restanteVes = Math.max(0, limiteVes - gastadoVes);
 
       return {
         ...b,
+        isFixed,
         gastado_ves: gastadoVes,
         gastado_usd: gastadoUsd,
         limite_ves: limiteVes,
@@ -219,7 +238,7 @@ export const BudgetsView: React.FC = () => {
         restante_usd: restanteUsd,
       };
     });
-  }, [budgets, transactions, convert, activeUsdRate, selectedMonthIdx, selectedYear]);
+  }, [budgets, transactions, convert, activeUsdRate, selectedMonthIdx, selectedYear, categories, fixedOverrides]);
 
   // Overall Totals
   const totals = useMemo(() => {
@@ -230,6 +249,18 @@ export const BudgetsView: React.FC = () => {
 
     const totalRestanteUsd = Math.max(0, totalLimiteUsd - totalGastadoUsd);
     const totalRestanteVes = Math.max(0, totalLimiteVes - totalGastadoVes);
+
+    // Totales Fijos vs Variables
+    const fixedBudgets = computedBudgets.filter((b) => b.isFixed);
+    const variableBudgets = computedBudgets.filter((b) => !b.isFixed);
+
+    const fixedLimiteUsd = fixedBudgets.reduce((acc, b) => acc + b.limite_usd, 0);
+    const fixedGastadoUsd = fixedBudgets.reduce((acc, b) => acc + b.gastado_usd, 0);
+    const fixedPendienteUsd = Math.max(0, fixedLimiteUsd - fixedGastadoUsd);
+
+    const variableLimiteUsd = variableBudgets.reduce((acc, b) => acc + b.limite_usd, 0);
+    const variableGastadoUsd = variableBudgets.reduce((acc, b) => acc + b.gastado_usd, 0);
+    const variableRestanteUsd = Math.max(0, variableLimiteUsd - variableGastadoUsd);
 
     const globalPercent = totalLimiteUsd > 0 ? (totalGastadoUsd / totalLimiteUsd) * 100 : 0;
     const remainingPercent = Math.max(0, 100 - globalPercent);
@@ -264,6 +295,14 @@ export const BudgetsView: React.FC = () => {
       totalGastadoVes,
       totalRestanteUsd,
       totalRestanteVes,
+      fixedCount: fixedBudgets.length,
+      variableCount: variableBudgets.length,
+      fixedLimiteUsd,
+      fixedGastadoUsd,
+      fixedPendienteUsd,
+      variableLimiteUsd,
+      variableGastadoUsd,
+      variableRestanteUsd,
       globalPercent,
       remainingPercent,
       dailySpentUsd,
@@ -280,6 +319,11 @@ export const BudgetsView: React.FC = () => {
   // Sorted list of budgets
   const filteredAndSortedBudgets = useMemo(() => {
     let list = [...computedBudgets];
+    if (fixedFilter === 'fixed') {
+      list = list.filter((b) => b.isFixed);
+    } else if (fixedFilter === 'variable') {
+      list = list.filter((b) => !b.isFixed);
+    }
     if (filterOverOnly) {
       list = list.filter((b) => b.porcentaje_usado >= 75);
     }
@@ -295,7 +339,7 @@ export const BudgetsView: React.FC = () => {
       });
     }
     return list;
-  }, [computedBudgets, sortBy, filterOverOnly, categories]);
+  }, [computedBudgets, sortBy, filterOverOnly, categories, fixedFilter]);
 
   // Handler for creating a new category
   const handleCreateCategory = async (e: React.FormEvent) => {
@@ -657,6 +701,33 @@ export const BudgetsView: React.FC = () => {
             </div>
           </div>
 
+          {/* Sub-Tabs: Todos / Fijos / Variables */}
+          <div className={styles.filterTabsRow}>
+            <button
+              type="button"
+              onClick={() => setFixedFilter('all')}
+              className={`${styles.filterTabBtn} ${fixedFilter === 'all' ? styles.filterTabBtnActive : ''}`}
+            >
+              Todos ({computedBudgets.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFixedFilter('fixed')}
+              className={`${styles.filterTabBtn} ${fixedFilter === 'fixed' ? styles.filterTabBtnActive : ''}`}
+              title="Gastos fijos y compromisos obligatorios como Alquiler, Servicios, Condominio"
+            >
+              🔒 Gastos Fijos ({totals.fixedCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFixedFilter('variable')}
+              className={`${styles.filterTabBtn} ${fixedFilter === 'variable' ? styles.filterTabBtnActive : ''}`}
+              title="Gastos flexibles del día a día como Alimentación, Ocio, Compras"
+            >
+              🔄 Gastos Variables ({totals.variableCount})
+            </button>
+          </div>
+
           {/* Categories List */}
           {filteredAndSortedBudgets.length === 0 ? (
             <div className={styles.emptyStateBox}>
@@ -664,10 +735,14 @@ export const BudgetsView: React.FC = () => {
                 <span className="material-symbols-outlined text-[28px]">pie_chart</span>
               </div>
               <p style={{ color: '#ededf0', fontWeight: 600, fontSize: '0.95rem' }}>
-                No hay presupuestos fijados todavía
+                No hay presupuestos en esta sección
               </p>
               <p style={{ color: '#878a99', fontSize: '0.82rem', maxWidth: '360px' }}>
-                Fija techos mensuales para tus categorías para protegerte contra la devaluación y mantener control de gastos.
+                {fixedFilter === 'fixed'
+                  ? 'No tienes presupuestos marcados como fijos (ej. Alquiler, Servicios). Puedes marcar cualquiera como fijo.'
+                  : fixedFilter === 'variable'
+                    ? 'No tienes presupuestos variables (ej. Alimentación, Ocio).'
+                    : 'Fija techos mensuales para tus categorías para protegerte contra la devaluación y mantener control de gastos.'}
               </p>
               <button
                 type="button"
@@ -721,7 +796,22 @@ export const BudgetsView: React.FC = () => {
                           <span className="material-symbols-outlined text-[18px]">{iconName}</span>
                         </div>
                         <div className={styles.categoryMeta}>
-                          <span className={styles.categoryTitle}>{cat?.nombre || 'Categoría'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className={styles.categoryTitle}>{cat?.nombre || 'Categoría'}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (cat) {
+                                  setStoredFixedOverride(cat.id, !b.isFixed);
+                                  setFixedOverrides(getStoredFixedOverrides());
+                                }
+                              }}
+                              className={b.isFixed ? styles.badgeFixed : styles.badgeVariable}
+                              title={b.isFixed ? 'Gasto Fijo / Obligatorio. Clic para cambiar a Variable.' : 'Gasto Variable / Flexible. Clic para cambiar a Fijo.'}
+                            >
+                              {b.isFixed ? '🔒 Fijo' : '🔄 Variable'}
+                            </button>
+                          </div>
                           <span className={styles.categorySub}>{description}</span>
                         </div>
                       </div>
@@ -748,7 +838,11 @@ export const BudgetsView: React.FC = () => {
                           <span className={styles.categoryResta}>
                             {isOver
                               ? `Exceso: ${primaryExceso}`
-                              : `Resta: ${primaryRestante}`}
+                              : b.isFixed
+                                ? b.porcentaje_usado >= 100
+                                  ? <span className={styles.badgePaidDone}>✓ Pagado</span>
+                                  : <span className={styles.badgePendingPay}>⏳ Falta pagar: {primaryRestante}</span>
+                                : `Resta: ${primaryRestante}`}
                           </span>
                           <span className={styles.categoryPctBadge} style={{ color: pctColor }}>
                             {b.porcentaje_usado.toFixed(1).replace('.', ',')}%

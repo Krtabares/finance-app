@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign } from 'lucide-react';
+import { X, DollarSign, ShieldCheck, Sparkles } from 'lucide-react';
 import styles from './TransactionModal.module.css';
 import { useFinance } from '@/context/FinanceContext';
 import { Currency } from '@/types/finance';
+import { isCategoryFixed, setStoredFixedOverride } from '@/lib/commitments';
 
 interface BudgetModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({ isOpen, onClose }) => 
   const [moneda, setMoneda] = useState<Currency>(preferredViewCurrency === 'USD' ? 'USD' : 'USD');
   const [categoryId, setCategoryId] = useState(availableCategories[0]?.id || expenseCategories[0]?.id || '');
   const [montoLimite, setMontoLimite] = useState('');
+  const [esFijo, setEsFijo] = useState<boolean>(true);
   
   // Rate handling (usada internamente para registrar la equivalencia en VES)
   const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
@@ -31,6 +33,14 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({ isOpen, onClose }) => 
       setCategoryId(availableCategories[0].id);
     }
   }, [isOpen, availableCategories]);
+
+  // Actualizar si es fijo o variable según la categoría seleccionada
+  useEffect(() => {
+    if (categoryId) {
+      const selected = categories.find((c) => c.id === categoryId);
+      setEsFijo(isCategoryFixed(selected));
+    }
+  }, [categoryId, categories]);
 
   if (!isOpen) return null;
 
@@ -46,6 +56,9 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({ isOpen, onClose }) => 
     const now = new Date();
     const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+    // Guardar preferencia de Fijo vs Variable
+    setStoredFixedOverride(categoryId, esFijo);
+
     // Guardamos siempre en USD como valor base, y se calcula en BS a la tasa activa
     const limiteEnUsd = moneda === 'VES'
       ? (activeUsdRate > 0 ? numMonto / activeUsdRate : numMonto)
@@ -58,6 +71,7 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({ isOpen, onClose }) => 
       moneda,
       monto_original: numMonto,
       tasa_cambio: activeUsdRate,
+      tipo_gasto: esFijo ? 'fijo' : 'variable',
     });
 
     setMontoLimite('');
@@ -166,6 +180,78 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({ isOpen, onClose }) => 
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Naturaleza del Gasto (Fijo vs Variable) */}
+            <div className={styles.fieldGroup}>
+              <label className={styles.label}>Naturaleza de este Gasto</label>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '8px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  padding: '4px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setEsFijo(true)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    background: esFijo ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: esFijo ? 'rgba(59, 130, 246, 0.5)' : 'transparent',
+                    color: esFijo ? '#60a5fa' : 'var(--text-muted)',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <ShieldCheck size={14} />
+                  Fijo / Obligatorio
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEsFijo(false)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    background: !esFijo ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: !esFijo ? 'rgba(16, 185, 129, 0.5)' : 'transparent',
+                    color: !esFijo ? '#34d399' : 'var(--text-muted)',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Sparkles size={14} />
+                  Variable / Flexible
+                </button>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+                {esFijo
+                  ? '🔒 Se apartará de tu dinero disponible como un compromiso obligatorio del mes (ej. Alquiler, Servicios, Condominio).'
+                  : '🔄 Se considerará dinero libre para tus gastos cotidianos (ej. Comida, Ocio, Compras).'}
+              </div>
             </div>
 
             {/* Monto */}

@@ -27,6 +27,7 @@ export interface Category {
   user_id?: string;
   nombre: string;
   tipo: 'ingreso' | 'gasto';
+  tipo_gasto?: 'fijo' | 'variable';
   color: string;
   icono: string;
   created_at?: string;
@@ -70,6 +71,7 @@ export interface Budget {
   moneda?: Currency; // Moneda original en la que se configuró ('VES' | 'USD')
   monto_original?: number; // Monto original ingresado por el usuario
   tasa_cambio?: number; // Tasa al momento de fijar el presupuesto
+  tipo_gasto?: 'fijo' | 'variable';
   created_at?: string;
   // Computed
   gastado_mes?: number;

@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '@/context/FinanceContext';
 import { formatCurrency, parseTransactionDate } from '@/lib/formatters';
+import { calculateMonthlyCommitments, getStoredFixedOverrides } from '@/lib/commitments';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: string) => void;
@@ -26,6 +27,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     debts,
     debtInstallments,
   } = useFinance();
+
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const [fixedOverrides, setFixedOverrides] = useState<Record<string, boolean>>({});
+  const [spendPeriod, setSpendPeriod] = useState<'quincena' | 'mes'>('quincena');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('finance_dashboard_spend_period');
+      if (saved === 'quincena' || saved === 'mes') {
+        setSpendPeriod(saved);
+      }
+    } catch {
+      // ignore localStorage error
+    }
+  }, []);
+
+  useEffect(() => {
+    setFixedOverrides(getStoredFixedOverrides());
+    const handleOverridesChange = () => {
+      setFixedOverrides(getStoredFixedOverrides());
+    };
+    window.addEventListener('finance_fixed_categories_changed', handleOverridesChange);
+    return () => {
+      window.removeEventListener('finance_fixed_categories_changed', handleOverridesChange);
+    };
+  }, []);
 
   // Helper for formatting number into whole and decimal parts
   const formatAmountParts = (val: number, currency: 'VES' | 'USD') => {
@@ -336,87 +363,98 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return list.slice(0, 3);
   }, [debts, debtInstallments]);
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIdx = now.getMonth();
+  const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+  const totalAccountsUsd = summary.activos_usd || 0;
+
+  const commitments = useMemo(() => {
+    return calculateMonthlyCommitments({
+      budgets,
+      categories,
+      transactions,
+      debts,
+      debtInstallments,
+      activeUsdRate,
+      totalAccountsUsd,
+      targetYear: currentYear,
+      targetMonth: currentMonthIdx,
+      overrideMap: fixedOverrides,
+      period: spendPeriod,
+    });
+  }, [
+    budgets,
+    categories,
+    transactions,
+    debts,
+    debtInstallments,
+    activeUsdRate,
+    totalAccountsUsd,
+    currentYear,
+    currentMonthIdx,
+    fixedOverrides,
+    spendPeriod,
+  ]);
+
   // 1. ¿Cuánto dinero tengo en total? (Dinero Total Disponible)
   // Suma consolidada de todas las cuentas bancarias y efectivo (sin restar deudas)
   const totalCuentas = isVes ? summary.activos_ves : summary.activos_usd;
   const totalCuentasSecondary = isVes ? summary.activos_usd : summary.activos_ves;
 
-  // 2. ¿Cuánto puedo gastar este mes? (Disponible para Gastar)
-  // Cuánto dinero libre te queda antes de alcanzar tu límite presupuestario o entrar en déficit
+  // 2. ¿Cuánto puedo gastar? (Dinero Realmente Libre)
+  // Descuenta los compromisos fijos pendientes (Alquiler, Servicios, Cuotas de Préstamos)
+  // de la quincena o mes para reflejar con honestidad cuánto dinero tienes disponible.
   const disponibleParaGastar = useMemo(() => {
-    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
-    const totalPresupuestoUsd = budgets.reduce((sum, b) => {
-      const bUsd =
-        b.moneda === 'USD'
-          ? b.monto_original || b.monto_limite
-          : b.monto_limite > 500 && activeUsdRate > 0
-            ? b.monto_limite / activeUsdRate
-            : b.monto_limite;
-      return sum + (bUsd || 0);
-    }, 0);
+    const libreUsd = commitments.dineroRealmenteLibreUsd;
+    const fijosPendientesUsd = commitments.totalCompromisosPendientesUsd;
+    const hasPendingFijos = fijosPendientesUsd > 0.01;
+    const pendingCount = commitments.itemsPendientes.length;
 
-    const hasBudget = totalPresupuestoUsd > 0;
-    const gastosMesUsd = summary.gastos_mes_usd;
-    const ingresosMesUsd = summary.ingresos_mes_usd;
-
-    let disponibleUsd = 0;
-    let techoUsd = 0;
     let statusText = '';
     let badgeText = '';
     let isAlert = false;
     let isGood = true;
 
-    if (hasBudget) {
-      techoUsd = totalPresupuestoUsd;
-      const budgetRestante = totalPresupuestoUsd - gastosMesUsd;
-      if (budgetRestante <= 0) {
-        disponibleUsd = 0;
-        statusText = 'Presupuesto mensual agotado';
-        badgeText = 'Límite alcanzado';
-        isAlert = true;
-        isGood = false;
-      } else {
-        disponibleUsd = budgetRestante;
-        const pctUsado = Math.min(100, Math.round((gastosMesUsd / totalPresupuestoUsd) * 100));
-        statusText = `Queda ${100 - pctUsado}% antes del límite`;
-        badgeText = pctUsado > 85 ? 'Presupuesto ajustado' : 'Bajo control';
-        isAlert = pctUsado > 85;
-        isGood = pctUsado <= 85;
-      }
+    const fijosText = isVes
+      ? `Bs. ${(fijosPendientesUsd * activeUsdRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}`
+      : `$${fijosPendientesUsd.toFixed(2)}`;
+
+    const isQuincena = spendPeriod === 'quincena';
+    const periodShort = isQuincena ? (commitments.fortnightNumber === 1 ? '1ra Q' : '2da Q') : 'Mes';
+
+    if (hasPendingFijos) {
+      statusText = `Apartado fijos (${periodShort}): ${fijosText} (${pendingCount} pendientes) • Clic para desglose`;
+      badgeText = libreUsd > 0 ? 'Fijos apartados' : 'Margen ajustado';
+      isAlert = libreUsd <= 0;
+      isGood = libreUsd > 0;
     } else {
-      // Sin presupuestos configurados: margen operativo antes de déficit mensual (Ingresos - Gastos)
-      techoUsd = ingresosMesUsd;
-      const margenUsd = ingresosMesUsd - gastosMesUsd;
-      if (margenUsd <= 0) {
-        disponibleUsd = 0;
-        statusText = ingresosMesUsd > 0 ? 'En déficit mensual' : 'Sin ingresos registrados este mes';
-        badgeText = ingresosMesUsd > 0 ? 'En déficit' : 'Sin margen';
-        isAlert = ingresosMesUsd > 0;
-        isGood = false;
-      } else {
-        disponibleUsd = margenUsd;
-        statusText = 'Margen libre antes de déficit';
-        badgeText = 'Superávit mensual';
-        isAlert = false;
-        isGood = true;
-      }
+      statusText = `${commitments.fortnightLabel || 'Todo al día'} • Sin fijos pendientes`;
+      badgeText = 'Totalmente libre';
+      isAlert = false;
+      isGood = true;
     }
 
-    const disponibleDominant = isVes ? disponibleUsd * activeUsdRate : disponibleUsd;
-    const disponibleSecondary = isVes ? disponibleUsd : disponibleUsd * activeUsdRate;
-    const techoDominant = isVes ? techoUsd * activeUsdRate : techoUsd;
+    const disponibleDominant = isVes ? libreUsd * activeUsdRate : libreUsd;
+    const disponibleSecondary = isVes ? libreUsd : libreUsd * activeUsdRate;
 
     return {
       disponibleDominant,
       disponibleSecondary,
-      techoDominant,
+      libreUsd,
+      fijosPendientesUsd,
+      pendingCount,
+      hasPendingFijos,
       statusText,
       badgeText,
       isAlert,
       isGood,
-      hasBudget,
+      hasBudget: budgets.length > 0,
+      period: spendPeriod,
+      fortnightLabel: commitments.fortnightLabel,
+      daysRemaining: commitments.daysRemainingInPeriod,
     };
-  }, [budgets, summary, rates, isVes]);
+  }, [commitments, isVes, activeUsdRate, budgets.length, spendPeriod]);
 
   // 3. ¿Qué debo pagar pronto? (Próximos Pagos a 15 días)
   // Alerta clara de cuotas de préstamos o compras a crédito próximas a vencer, o aviso verde de "Al día: sin pagos urgentes"
@@ -572,13 +610,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* 2. ¿Cuánto puedo gastar este mes? */}
-              <div>
-                <div className="text-xs text-neutral-500 mb-1">¿Cuánto puedo gastar?</div>
-                <div className="text-lg font-medium text-neutral-200 font-mono">
+              {/* 2. ¿Cuánto puedo gastar libre? (Esta Quincena o Mes) */}
+              <div
+                onClick={() => setIsBreakdownOpen(true)}
+                className="cursor-pointer group"
+                title="Haz clic para ver el desglose entre dinero total vs compromisos fijos pendientes"
+              >
+                <div className="text-xs text-neutral-500 mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-1 group-hover:text-neutral-300 transition-colors">
+                    <span>
+                      {spendPeriod === 'quincena' ? '¿Cuánto puedo gastar libre?' : '¿Cuánto puedo gastar este mes?'}
+                    </span>
+                    <span className="material-symbols-outlined text-[13px] text-neutral-500 group-hover:text-neutral-300">info</span>
+                  </div>
+                  {/* Selector Toggle Quincena / Mes */}
+                  <div
+                    className="flex items-center bg-neutral-900 border border-neutral-800 rounded p-0.5 text-[10px] font-mono"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSpendPeriod('quincena');
+                        try { localStorage.setItem('finance_dashboard_spend_period', 'quincena'); } catch {}
+                      }}
+                      className={`px-1.5 py-0.5 rounded transition-all ${
+                        spendPeriod === 'quincena'
+                          ? 'bg-neutral-700 text-white font-medium shadow-xs'
+                          : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                      title="Ver dinero libre disponible para esta quincena (1 al 15 o 16 al fin de mes)"
+                    >
+                      Quincena
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSpendPeriod('mes');
+                        try { localStorage.setItem('finance_dashboard_spend_period', 'mes'); } catch {}
+                      }}
+                      className={`px-1.5 py-0.5 rounded transition-all ${
+                        spendPeriod === 'mes'
+                          ? 'bg-neutral-700 text-white font-medium shadow-xs'
+                          : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                      title="Ver dinero libre disponible para todo el mes"
+                    >
+                      Mes
+                    </button>
+                  </div>
+                </div>
+                <div className={`text-lg font-medium font-mono ${disponibleParaGastar.isAlert ? 'text-amber-400' : 'text-neutral-200'}`}>
                   {formatCurrency(disponibleParaGastar.disponibleDominant, preferredViewCurrency)}
                 </div>
-                <div className="text-[11px] text-neutral-500 mt-0.5">
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
                   ≈ {fmtSecondary(disponibleParaGastar.disponibleSecondary)} {isVes ? 'USD' : 'VES'} • {disponibleParaGastar.statusText}
                 </div>
               </div>
@@ -872,6 +957,124 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           </div>
 
+          {/* Widget de Gastos Fijos y Compromisos del Mes (Alquiler, Servicios, etc.) */}
+          <div className="space-y-3 pt-4 border-t border-neutral-800/40" id="gastos-fijos-widget">
+            <div className="flex items-center justify-between pb-1">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-neutral-400">home_work</span>
+                  <h2 className="text-sm font-medium text-neutral-200">Gastos Fijos del Mes</h2>
+                </div>
+                <div className="text-[11px] text-amber-400/90 mt-0.5 font-mono">
+                  Por pagar este mes: {formatCurrency(isVes ? commitments.totalCompromisosPendientesUsd * activeUsdRate : commitments.totalCompromisosPendientesUsd, preferredViewCurrency)}
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBreakdownOpen(true)}
+                className="text-xs font-mono text-neutral-300 hover:text-white transition-colors bg-neutral-900 border border-neutral-800 hover:border-neutral-700 px-2.5 py-1 rounded-md flex items-center gap-1"
+                title="Ver lista exacta y auditoría de todos los gastos que componen este monto"
+              >
+                <span>Ver auditoría ({commitments.itemsPendientes.length})</span>
+                <span className="material-symbols-outlined text-[14px]">visibility</span>
+              </button>
+            </div>
+
+            {commitments.items.length > 0 ? (
+              <div className="space-y-2">
+                {commitments.items.map((item) => {
+                  const isPagado = item.estado === 'pagado';
+                  const isParcial = item.estado === 'parcial';
+                  const isPendiente = item.estado === 'pendiente';
+
+                  const itemPendienteDominant = isVes
+                    ? item.montoPendienteUsd * activeUsdRate
+                    : item.montoPendienteUsd;
+                  const itemTotalDominant = isVes
+                    ? item.montoTotalUsd * activeUsdRate
+                    : item.montoTotalUsd;
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        if (item.tipo === 'cuota_deuda') {
+                          onNavigateTab('debts');
+                        } else {
+                          onNavigateTab('budgets');
+                        }
+                      }}
+                      className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${
+                        isPendiente
+                          ? 'border-amber-900/40 bg-amber-950/10 hover:border-amber-700/60'
+                          : isParcial
+                            ? 'border-blue-900/40 bg-blue-950/10 hover:border-blue-700/60'
+                            : 'border-neutral-800/40 bg-neutral-900/20 hover:border-neutral-700/60'
+                      }`}
+                    >
+                      <div className="min-w-0 pr-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-neutral-200 truncate group-hover:text-white">
+                            {item.nombre}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                              isPagado
+                                ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
+                                : isParcial
+                                  ? 'bg-blue-950/40 text-blue-400 border border-blue-800/40'
+                                  : 'bg-amber-950/40 text-amber-400 border border-amber-800/40'
+                            }`}
+                          >
+                            {isPagado ? '✓ Pagado' : isParcial ? '🟡 Parcial' : '⏳ Falta pagar'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-neutral-500 mt-1 flex items-center gap-1.5">
+                          <span>
+                            {isPagado
+                              ? 'Completado este mes'
+                              : `Abonado $${item.montoPagadoUsd.toFixed(2)} de $${item.montoTotalUsd.toFixed(2)}`}
+                          </span>
+                        </div>
+                        {/* Micro barra de progreso */}
+                        <div className="h-1 w-28 bg-neutral-800 rounded-full overflow-hidden mt-1.5">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isPagado ? 'bg-emerald-500' : isParcial ? 'bg-blue-500' : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${Math.min(100, item.porcentajePagado)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-right font-mono text-xs flex-shrink-0">
+                        <div className={isPagado ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                          {isPagado ? (
+                            'Al día'
+                          ) : (
+                            <span>Falta: {formatCurrency(itemPendienteDominant, preferredViewCurrency)}</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-neutral-500 mt-0.5">
+                          Total: {formatCurrency(itemTotalDominant, preferredViewCurrency)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                onClick={() => onNavigateTab('budgets')}
+                className="p-3.5 rounded-lg border border-dashed border-neutral-800/70 hover:border-neutral-700/80 bg-neutral-900/10 text-center cursor-pointer transition-all"
+              >
+                <div className="text-xs text-neutral-400">Sin gastos fijos configurados aún</div>
+                <div className="text-[11px] text-neutral-600 mt-0.5">
+                  Fija presupuestos para Alquiler, Servicios, etc. para verlos aquí
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Widget de Próximas Cuotas de Préstamos / Deudas */}
           <div className="space-y-3 pt-4 border-t border-neutral-800/40">
             <div className="flex items-center justify-between pb-1">
@@ -1009,6 +1212,292 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Modal Desglose y Auditoría Real: Dinero Realmente Libre vs Compromisos */}
+      {isBreakdownOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setIsBreakdownOpen(false)}
+        >
+          <div
+            className="bg-[#12141a] border border-neutral-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Auditoría Real: Gastos y Compromisos</h3>
+                  <p className="text-xs text-neutral-400">
+                    {spendPeriod === 'quincena' ? `Cálculo ajustado a la ${commitments.fortnightLabel || 'quincena actual'}` : 'Desglose exacto de compromisos mensuales'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Selector Quincena / Mes en el modal */}
+                <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 text-xs font-mono">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSpendPeriod('quincena');
+                      try { localStorage.setItem('finance_dashboard_spend_period', 'quincena'); } catch {}
+                    }}
+                    className={`px-3 py-1 rounded-md transition-all ${
+                      spendPeriod === 'quincena'
+                        ? 'bg-neutral-700 text-white font-medium shadow-xs'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Esta Quincena
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSpendPeriod('mes');
+                      try { localStorage.setItem('finance_dashboard_spend_period', 'mes'); } catch {}
+                    }}
+                    className={`px-3 py-1 rounded-md transition-all ${
+                      spendPeriod === 'mes'
+                        ? 'bg-neutral-700 text-white font-medium shadow-xs'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Mes Completo
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setIsBreakdownOpen(false)}
+                  className="text-neutral-500 hover:text-neutral-300 p-1.5 rounded-lg hover:bg-neutral-800/60 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Banner de Total Compromisos Pendientes */}
+            <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-800/40 flex items-center justify-between">
+              <div>
+                <div className="text-xs text-amber-300/80 uppercase font-mono tracking-wider flex items-center gap-2">
+                  <span>Total Compromisos Fijos Pendientes</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-sans">
+                    {spendPeriod === 'quincena' ? commitments.fortnightLabel : 'Mes'}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-400 mt-0.5">
+                  {spendPeriod === 'quincena'
+                    ? 'Suma de gastos fijos y cuotas que vencen en esta quincena'
+                    : 'Suma de gastos fijos y cuotas que faltan por pagar este mes'}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold font-mono text-amber-400">
+                  {formatCurrency(isVes ? commitments.totalCompromisosPendientesUsd * activeUsdRate : commitments.totalCompromisosPendientesUsd, preferredViewCurrency)}
+                </div>
+                <div className="text-[11px] font-mono text-neutral-500">
+                  {commitments.itemsPendientes.length} concepto{commitments.itemsPendientes.length === 1 ? '' : 's'} pendiente{commitments.itemsPendientes.length === 1 ? '' : 's'}
+                </div>
+              </div>
+            </div>
+
+            {/* Sección 1: Lista Item por Item de Gastos Fijos Pendientes */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-neutral-400 px-1">
+                <span className="font-medium text-neutral-300">1. ¿De dónde sale este monto? (Lista detallada)</span>
+                <span className="font-mono text-[11px]">Falta Pagar</span>
+              </div>
+
+              {commitments.items.length > 0 ? (
+                <div className="space-y-1.5 font-mono text-xs">
+                  {commitments.items.map((item) => {
+                    const isPagado = item.estado === 'pagado';
+                    const isParcial = item.estado === 'parcial';
+                    const isDebt = item.tipo === 'cuota_deuda';
+
+                    const itemTotalDom = isVes ? item.montoTotalUsd * activeUsdRate : item.montoTotalUsd;
+                    const itemPagadoDom = isVes ? item.montoPagadoUsd * activeUsdRate : item.montoPagadoUsd;
+                    const itemPendienteDom = isVes ? item.montoPendienteUsd * activeUsdRate : item.montoPendienteUsd;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-3 rounded-lg border flex items-center justify-between ${
+                          isPagado
+                            ? 'bg-neutral-900/30 border-neutral-800/40 text-neutral-400'
+                            : isParcial
+                              ? 'bg-blue-950/15 border-blue-900/40 text-neutral-200'
+                              : 'bg-neutral-900/60 border-neutral-800 text-neutral-200'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-3">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[15px] text-neutral-400 flex-shrink-0">
+                              {isDebt ? 'credit_card' : 'home_work'}
+                            </span>
+                            <span className="font-sans font-medium text-xs text-neutral-200 truncate">
+                              {item.nombre}
+                            </span>
+                            <span
+                              className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                                isDebt
+                                  ? 'bg-purple-950/50 text-purple-300 border border-purple-800/40'
+                                  : 'bg-blue-950/50 text-blue-300 border border-blue-800/40'
+                              }`}
+                            >
+                              {isDebt ? 'Préstamo' : 'Fijo Mensual'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-neutral-500 font-sans mt-0.5 ml-6">
+                            Total: {formatCurrency(itemTotalDom, preferredViewCurrency)} • Pagado: {formatCurrency(itemPagadoDom, preferredViewCurrency)}
+                          </div>
+                        </div>
+
+                        <div className="text-right flex-shrink-0">
+                          {isPagado ? (
+                            <span className="text-emerald-400 font-sans text-xs font-medium">✓ Pagado</span>
+                          ) : (
+                            <span className="text-amber-400 font-bold text-xs">
+                              {formatCurrency(itemPendienteDom, preferredViewCurrency)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-4 text-center text-xs text-neutral-500 bg-neutral-900/30 rounded-lg border border-neutral-800">
+                  No hay gastos fijos ni cuotas de préstamos registradas este mes.
+                </div>
+              )}
+            </div>
+
+            {/* Sección 2: Presupuestos Variables (Gastos Libres Cotidianos) */}
+            {commitments.itemsVariables.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-neutral-800/60">
+                <div className="flex items-center justify-between text-xs text-neutral-400 px-1">
+                  <span className="font-medium text-neutral-300">2. Presupuestos Variables (Comida, Salidas, etc.)</span>
+                  <span className="font-mono text-[11px]">Restante Libre</span>
+                </div>
+                <div className="space-y-1.5 font-mono text-xs">
+                  {commitments.itemsVariables.map((v) => {
+                    const limDom = isVes ? v.limiteUsd * activeUsdRate : v.limiteUsd;
+                    const gastDom = isVes ? v.gastadoUsd * activeUsdRate : v.gastadoUsd;
+                    const restDom = isVes ? v.restanteUsd * activeUsdRate : v.restanteUsd;
+
+                    return (
+                      <div
+                        key={v.id}
+                        className="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800 flex items-center justify-between"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-sans font-medium text-xs text-neutral-200 truncate">
+                            {v.nombre}
+                          </div>
+                          <div className="text-[11px] text-neutral-500 font-sans mt-0.5">
+                            Límite: {formatCurrency(limDom, preferredViewCurrency)} • Gastado: {formatCurrency(gastDom, preferredViewCurrency)}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <span className={v.restanteUsd > 0 ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
+                            {formatCurrency(restDom, preferredViewCurrency)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Sección 3: Fórmula y Resultado Final */}
+            <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-800/40 space-y-2">
+              <div className="flex items-center justify-between text-xs font-sans">
+                <span className="text-neutral-400">
+                  {spendPeriod === 'quincena' ? 'Presupuesto Variable de la Quincena:' : 'Total Presupuestado en el Mes:'}
+                </span>
+                <span className="font-mono text-neutral-200">
+                  {formatCurrency(
+                    isVes
+                      ? (spendPeriod === 'quincena' ? commitments.totalPresupuestoVariableUsd : commitments.totalPresupuestoGlobalUsd) * activeUsdRate
+                      : (spendPeriod === 'quincena' ? commitments.totalPresupuestoVariableUsd : commitments.totalPresupuestoGlobalUsd),
+                    preferredViewCurrency
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-sans">
+                <span className="text-neutral-400">
+                  {spendPeriod === 'quincena' ? 'Gastos variables hechos en esta quincena:' : 'Gastos ya realizados este mes:'}
+                </span>
+                <span className="font-mono text-neutral-300">
+                  -{formatCurrency(
+                    isVes
+                      ? (spendPeriod === 'quincena' ? commitments.totalVariableGastadoUsd : commitments.totalGastosGlobalUsd) * activeUsdRate
+                      : (spendPeriod === 'quincena' ? commitments.totalVariableGastadoUsd : commitments.totalGastosGlobalUsd),
+                    preferredViewCurrency
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-sans">
+                <span className="text-amber-400">
+                  {spendPeriod === 'quincena' ? 'Compromisos fijos de esta quincena:' : 'Compromisos Fijos que faltan por pagar:'}
+                </span>
+                <span className="font-mono text-amber-400 font-semibold">
+                  -{formatCurrency(isVes ? commitments.totalCompromisosPendientesUsd * activeUsdRate : commitments.totalCompromisosPendientesUsd, preferredViewCurrency)}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-blue-800/40 flex items-center justify-between">
+                <div>
+                  <div className="text-blue-300 font-sans font-semibold text-xs flex items-center gap-1.5">
+                    <span>
+                      {spendPeriod === 'quincena' ? 'Dinero Libre para esta Quincena:' : 'Dinero Realmente Libre para gastar:'}
+                    </span>
+                    {spendPeriod === 'quincena' && commitments.daysRemainingInPeriod && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono">
+                        {commitments.daysRemainingInPeriod === 1 ? 'Queda 1 día' : `Quedan ${commitments.daysRemainingInPeriod} días`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-neutral-400 font-sans">
+                    {spendPeriod === 'quincena'
+                      ? `Margen libre para los días restantes de la ${commitments.fortnightLabel || 'quincena'}`
+                      : 'Margen libre del presupuesto tras apartar tus fijos'}
+                  </div>
+                </div>
+                <div className="text-white font-bold font-mono text-base">
+                  {formatCurrency(disponibleParaGastar.disponibleDominant, preferredViewCurrency)}
+                </div>
+              </div>
+            </div>
+
+            {/* Botones de acción */}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBreakdownOpen(false);
+                  onNavigateTab('budgets');
+                }}
+                className="flex-1 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[15px]">edit</span>
+                <span>Modificar Presupuestos</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBreakdownOpen(false)}
+                className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium text-white transition-colors"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
