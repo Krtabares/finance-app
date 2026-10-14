@@ -13,6 +13,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat-4', nombre: 'Salud y Medicamentos', tipo: 'gasto', color: '#ef4444', icono: 'Activity' },
   { id: 'cat-5', nombre: 'Salidas y Restaurantes', tipo: 'gasto', color: '#8b5cf6', icono: 'Utensils' },
   { id: 'cat-6', nombre: 'Compras y Tecnología', tipo: 'gasto', color: '#ec4899', icono: 'Laptop' },
+  { id: 'cat-11', nombre: 'Deudas y Préstamos', tipo: 'gasto', color: '#ef4444', icono: 'CreditCard' },
   { id: 'cat-7', nombre: 'Sueldo / Honorarios', tipo: 'ingreso', color: '#3b82f6', icono: 'Briefcase' },
   { id: 'cat-8', nombre: 'Freelance & Consultoría', tipo: 'ingreso', color: '#10b981', icono: 'TrendingUp' },
   { id: 'cat-9', nombre: 'Remesas', tipo: 'ingreso', color: '#6366f1', icono: 'Send' },

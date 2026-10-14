@@ -10,6 +10,7 @@ import { TransactionsView } from '@/components/views/TransactionsView';
 import { BudgetsView } from '@/components/views/BudgetsView';
 import { GoalsView } from '@/components/views/GoalsView';
 import { RatesView } from '@/components/views/RatesView';
+import { DebtsView } from '@/components/views/DebtsView';
 import { TransactionModal } from '@/components/modals/TransactionModal';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AuthScreen } from '@/components/auth/AuthScreen';
@@ -76,6 +77,8 @@ function FinanceAppContent() {
         return 'Cuentas y Billeteras';
       case 'transactions':
         return 'Transacciones y Movimientos';
+      case 'debts':
+        return 'Deudas y Préstamos en Cuotas';
       case 'budgets':
         return 'Presupuestos y Categorías';
       case 'goals':
@@ -124,6 +127,8 @@ function FinanceAppContent() {
           {currentTab === 'transactions' && (
             <TransactionsView onOpenNewTransaction={() => setIsTransactionModalOpen(true)} />
           )}
+
+          {currentTab === 'debts' && <DebtsView />}
 
           {currentTab === 'budgets' && <BudgetsView />}
 

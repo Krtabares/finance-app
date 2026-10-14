@@ -1,0 +1,195 @@
+/* Complementos para los modales de deudas.
+   La estructura base (card, header, campos, footer) viene de TransactionModal.module.css */
+
+.subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent-rose-bg);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: var(--accent-rose);
+  font-size: 0.8rem;
+}
+
+.suffixWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.suffixWrapper input {
+  padding-right: 56px !important;
+}
+
+.suffix {
+  position: absolute;
+  right: 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+}
+
+.summaryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.summaryTitle {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.summaryLabel {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.summaryValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summaryValueAccent {
+  color: var(--accent-emerald);
+}
+
+.toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toggle:hover {
+  color: var(--text-main);
+  border-color: var(--border-hover);
+}
+
+.previewTable {
+  max-height: 180px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.previewTable table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.previewTable th {
+  position: sticky;
+  top: 0;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-card-hover);
+}
+
+.previewTable td {
+  padding: 6px 8px;
+  color: var(--text-main);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.right {
+  text-align: right !important;
+}
+
+.infoBox {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.infoValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: right;
+}
+
+.infoSub {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--accent-amber);
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.linkBtn {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--accent-emerald);
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+}

@@ -11,6 +11,10 @@ import {
   Currency,
   RateSource,
   FinancialSummary,
+  Debt,
+  DebtInstallment,
+  DebtPayment,
+  InstallmentStatus,
 } from '@/types/finance';
 import {
   INITIAL_ACCOUNTS,
@@ -21,6 +25,11 @@ import {
   INITIAL_RATES,
 } from '@/lib/mockData';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { parseTransactionDate } from '@/lib/formatters';
+import {
+  generateDebtInstallments,
+  calculateRegularQuotaAmount,
+} from '@/lib/debts';
 
 export interface LiveQuotes {
   bcv: number | null;
@@ -36,6 +45,9 @@ interface FinanceContextType {
   budgets: Budget[];
   goals: SavingsGoal[];
   rates: ExchangeRate[];
+  debts: Debt[];
+  debtInstallments: DebtInstallment[];
+  debtPayments: DebtPayment[];
   liveQuotes: LiveQuotes | null;
   isSyncingRates: boolean;
   lastRatesSync: string | null;
@@ -57,12 +69,20 @@ interface FinanceContextType {
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
   addCategory: (data: Omit<Category, 'id'>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
   addBudget: (data: Omit<Budget, 'id'>) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
   addGoal: (data: Omit<SavingsGoal, 'id'>) => Promise<void>;
   updateGoalProgress: (id: string, deltaMonto: number) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   transferFunds: (fromAccountId: string, toAccountId: string, amountFrom: number, amountTo: number, nota?: string) => Promise<void>;
+  
+  // Acciones de Deudas y Préstamos
+  addDebt: (data: Omit<Debt, 'id' | 'saldo_pendiente' | 'monto_cuota' | 'estado'>) => Promise<Debt>;
+  deleteDebt: (id: string) => Promise<void>;
+  payDebtInstallment: (installmentId: string, amount: number, accountId: string, nota?: string) => Promise<void>;
+  addDebtExtraPayment: (debtId: string, amount: number, accountId: string, nota?: string) => Promise<void>;
+
   resetToDefaultData: () => Promise<void> | void;
   seedSupabaseDemoData: () => Promise<void>;
   loginUser: (email: string, id?: string) => void;
@@ -87,6 +107,9 @@ const STORAGE_KEYS = {
   USER: 'bolivar_finance_user_v1',
   LIVE_QUOTES: 'bolivar_finance_live_quotes_v1',
   LAST_SYNC: 'bolivar_finance_last_sync_v1',
+  DEBTS: 'bolivar_finance_debts_v1',
+  DEBT_INSTALLMENTS: 'bolivar_finance_debt_installments_v1',
+  DEBT_PAYMENTS: 'bolivar_finance_debt_payments_v1',
 };
 
 const sanitizeTx = (tx: any, fallbackRate: number = 450): Transaction => {
@@ -130,6 +153,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [rates, setRates] = useState<ExchangeRate[]>(INITIAL_RATES);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [debtInstallments, setDebtInstallments] = useState<DebtInstallment[]>([]);
+  const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
   const [liveQuotes, setLiveQuotes] = useState<LiveQuotes | null>(null);
   const [isSyncingRates, setIsSyncingRates] = useState<boolean>(false);
   const [lastRatesSync, setLastRatesSync] = useState<string | null>(null);
@@ -203,7 +229,28 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (catRes.data && catRes.data.length > 0) {
-        setCategories(catRes.data);
+        // Verificar si existe la categoría "Deudas y Préstamos"
+        const hasDebtCat = catRes.data.some((c: any) => c.nombre.toLowerCase().includes('deuda'));
+        if (!hasDebtCat) {
+          const { data: newCat } = await supabase
+            .from('categories')
+            .insert({
+              user_id: userId,
+              nombre: 'Deudas y Préstamos',
+              tipo: 'gasto',
+              color: '#ef4444',
+              icono: 'credit-card',
+            })
+            .select()
+            .single();
+          if (newCat) {
+            setCategories([...catRes.data, newCat]);
+          } else {
+            setCategories(catRes.data);
+          }
+        } else {
+          setCategories(catRes.data);
+        }
       } else {
         // Sembrar categorías iniciales en la base de datos
         const defaultCats = INITIAL_CATEGORIES.map(({ id, ...rest }) => ({
@@ -218,6 +265,20 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       if (bgRes.data) setBudgets(bgRes.data.map((b: any) => sanitizeBudget(b)));
       if (glRes.data) setGoals(glRes.data);
       if (rtRes.data && rtRes.data.length > 0) setRates(rtRes.data);
+
+      // Cargar deudas y cuotas de Supabase si existen las tablas
+      try {
+        const [debtsRes, instRes, payRes] = await Promise.all([
+          supabase.from('debts').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+          supabase.from('debt_installments').select('*').eq('user_id', userId).order('numero', { ascending: true }),
+          supabase.from('debt_payments').select('*').eq('user_id', userId).order('fecha', { ascending: false }),
+        ]);
+        if (debtsRes.data) setDebts(debtsRes.data);
+        if (instRes.data) setDebtInstallments(instRes.data);
+        if (payRes.data) setDebtPayments(payRes.data);
+      } catch (errDebts) {
+        console.warn('Tablas de deudas en Supabase aún no migradas, operando en modo memoria:', errDebts);
+      }
     } catch (err) {
       console.error('Error al sincronizar con Supabase:', err);
     } finally {
@@ -255,6 +316,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
           setTransactions([]);
           setBudgets([]);
           setGoals([]);
+          setDebts([]);
+          setDebtInstallments([]);
+          setDebtPayments([]);
           setIsLoading(false);
         }
       });
@@ -277,9 +341,22 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
             const storedView = localStorage.getItem(STORAGE_KEYS.VIEW_CURRENCY) as 'VES' | 'USD' | null;
             const storedQuotes = localStorage.getItem(STORAGE_KEYS.LIVE_QUOTES);
             const storedSync = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
+            const storedDebts = localStorage.getItem(STORAGE_KEYS.DEBTS);
+            const storedInstallments = localStorage.getItem(STORAGE_KEYS.DEBT_INSTALLMENTS);
+            const storedPayments = localStorage.getItem(STORAGE_KEYS.DEBT_PAYMENTS);
 
             setAccounts(storedAccounts ? JSON.parse(storedAccounts) : INITIAL_ACCOUNTS);
-            setCategories(storedCategories ? JSON.parse(storedCategories) : INITIAL_CATEGORIES);
+            const loadedCats: Category[] = storedCategories ? JSON.parse(storedCategories) : INITIAL_CATEGORIES;
+            if (!loadedCats.some((c) => c.nombre.toLowerCase().includes('deuda'))) {
+              loadedCats.push({
+                id: 'cat-11',
+                nombre: 'Deudas y Préstamos',
+                tipo: 'gasto',
+                color: '#ef4444',
+                icono: 'credit-card',
+              });
+            }
+            setCategories(loadedCats);
             setTransactions(storedTransactions ? JSON.parse(storedTransactions).map((t: any) => sanitizeTx(t)) : INITIAL_TRANSACTIONS);
             setBudgets(storedBudgets ? JSON.parse(storedBudgets).map((b: any) => sanitizeBudget(b)) : INITIAL_BUDGETS);
             setGoals(storedGoals ? JSON.parse(storedGoals) : INITIAL_GOALS);
@@ -288,6 +365,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
             if (storedView) setPreferredViewCurrency(storedView);
             if (storedQuotes) setLiveQuotes(JSON.parse(storedQuotes));
             if (storedSync) setLastRatesSync(storedSync);
+            if (storedDebts) setDebts(JSON.parse(storedDebts));
+            if (storedInstallments) setDebtInstallments(JSON.parse(storedInstallments));
+            if (storedPayments) setDebtPayments(JSON.parse(storedPayments));
           } else {
             setUser(null);
           }
@@ -317,6 +397,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(budgets));
       localStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(goals));
       localStorage.setItem(STORAGE_KEYS.RATES, JSON.stringify(rates));
+      localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+      localStorage.setItem(STORAGE_KEYS.DEBT_INSTALLMENTS, JSON.stringify(debtInstallments));
+      localStorage.setItem(STORAGE_KEYS.DEBT_PAYMENTS, JSON.stringify(debtPayments));
       localStorage.setItem(STORAGE_KEYS.RATE_SOURCE, activeRateSource);
       localStorage.setItem(STORAGE_KEYS.VIEW_CURRENCY, preferredViewCurrency);
       if (liveQuotes) {
@@ -329,7 +412,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       }
     }
-  }, [accounts, categories, transactions, budgets, goals, rates, liveQuotes, lastRatesSync, activeRateSource, preferredViewCurrency, user, isLoading]);
+  }, [accounts, categories, transactions, budgets, goals, rates, debts, debtInstallments, debtPayments, liveQuotes, lastRatesSync, activeRateSource, preferredViewCurrency, user, isLoading]);
 
   // Conversion helper
   const convert = (amount: number, from: Currency, to: Currency): number => {
@@ -499,21 +582,42 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [accounts, transactions, rates]);
 
-  // Financial summary computation: base guardada en USD, BS calculado
+  // Financial summary computation: base guardada en USD, BS calculado con deudas incluidas
   const summary = useMemo(() => {
-    let patrimonioUsd = 0;
-    let patrimonioVes = 0;
+    let activosUsd = 0;
+    let activosVes = 0;
     computedAccounts.forEach((acc) => {
-      patrimonioUsd += acc.saldo_en_usd || 0;
-      patrimonioVes += acc.saldo_en_ves || 0;
+      activosUsd += acc.saldo_en_usd || 0;
+      activosVes += acc.saldo_en_ves || 0;
     });
 
     const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+
+    // Cálculo de pasivos y deudas pendientes totales
+    let deudasUsd = 0;
+    debts.forEach((debt) => {
+      if (debt.estado === 'activa') {
+        const saldo = Number(debt.saldo_pendiente) || 0;
+        deudasUsd += convert(saldo, debt.moneda, 'USD');
+      }
+    });
+    const deudasVes = deudasUsd * activeUsdRate;
+
+    // Patrimonio Neto Real = Activos - Pasivos (Deudas)
+    const patrimonioUsd = activosUsd - deudasUsd;
+    const patrimonioVes = activosVes - deudasVes;
 
     if (!mounted) {
       return {
         patrimonio_usd: patrimonioUsd,
         patrimonio_ves: patrimonioVes,
+        activos_usd: activosUsd,
+        activos_ves: activosVes,
+        deudas_usd: deudasUsd,
+        deudas_ves: deudasVes,
+        deudas_mes_usd: 0,
+        deudas_mes_ves: 0,
+        cuotas_pendientes_mes: 0,
         ingresos_mes_usd: 0,
         ingresos_mes_ves: 0,
         gastos_mes_usd: 0,
@@ -524,9 +628,29 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       };
     }
 
+    // Cuotas pendientes para el mes en curso (evaluado tras el mount)
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const currentYm = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+
+    let deudasMesUsd = 0;
+    let cuotasPendientesMes = 0;
+
+    const activeDebtMap = new Map<string, Debt>();
+    debts.forEach((d) => {
+      if (d.estado === 'activa') activeDebtMap.set(d.id, d);
+    });
+
+    debtInstallments.forEach((inst) => {
+      const debt = activeDebtMap.get(inst.debt_id);
+      if (debt && inst.estado !== 'pagada' && inst.fecha_vencimiento.startsWith(currentYm)) {
+        const pendienteCuota = Math.max(0, (inst.monto || 0) - (inst.monto_pagado || 0));
+        deudasMesUsd += convert(pendienteCuota, debt.moneda, 'USD');
+        cuotasPendientesMes += 1;
+      }
+    });
+    const deudasMesVes = deudasMesUsd * activeUsdRate;
 
     let ingresosMesUsd = 0;
     let gastosMesUsd = 0;
@@ -534,8 +658,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     let gastosMesVes = 0;
 
     transactions.forEach((tx) => {
-      const txDate = new Date(tx.fecha);
-      if (txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear) {
+      const txInfo = parseTransactionDate(tx.fecha);
+      if (txInfo.month === currentMonth && txInfo.year === currentYear) {
         // Obtenemos valor base en USD
         const valUsd = Number(tx.monto_usd) || (tx.tasa_cambio && tx.tasa_cambio > 0 ? (Number(tx.monto_ves) || 0) / tx.tasa_cambio : convert(Number(tx.monto) || 0, tx.moneda, 'USD'));
         const valVes = Number(tx.monto_ves) || (valUsd * (tx.tasa_cambio || activeUsdRate));
@@ -557,6 +681,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     return {
       patrimonio_usd: patrimonioUsd,
       patrimonio_ves: patrimonioVes,
+      activos_usd: activosUsd,
+      activos_ves: activosVes,
+      deudas_usd: deudasUsd,
+      deudas_ves: deudasVes,
+      deudas_mes_usd: deudasMesUsd,
+      deudas_mes_ves: deudasMesVes,
+      cuotas_pendientes_mes: cuotasPendientesMes,
       ingresos_mes_usd: ingresosMesUsd,
       ingresos_mes_ves: ingresosMesVes,
       gastos_mes_usd: gastosMesUsd,
@@ -565,7 +696,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       balance_mes_ves: balanceMesVes,
       ahorro_tasa_mes: Math.max(0, Math.round(ahorroTasaMes * 10) / 10),
     };
-  }, [computedAccounts, transactions, rates, mounted]);
+  }, [computedAccounts, debts, debtInstallments, transactions, rates, mounted, convert]);
 
   // CRUD Actions
   const addTransaction = async (data: Omit<Transaction, 'id'>) => {
@@ -698,6 +829,17 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       id: 'cat-' + Date.now(),
     };
     setCategories((prev) => [...prev, newCat]);
+  };
+
+  const deleteCategory = async (id: string) => {
+    if (isSupabaseConfigured && supabase && user) {
+      try {
+        await supabase.from('categories').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Error al eliminar categoría en Supabase:', err);
+      }
+    }
+    setCategories((prev) => prev.filter((c) => c.id !== id));
   };
 
   const addBudget = async (data: Omit<Budget, 'id'>) => {
@@ -867,6 +1009,392 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  // ==========================================
+  // ACCIONES DEL MÓDULO DE DEUDAS Y PRÉSTAMOS
+  // ==========================================
+
+  const addDebt = async (
+    data: Omit<Debt, 'id' | 'saldo_pendiente' | 'monto_cuota' | 'estado'>
+  ): Promise<Debt> => {
+    // 1. Localizar o asegurar categoría "Deudas y Préstamos"
+    let catId = data.category_id;
+    if (!catId) {
+      const debtCat = categories.find((c) => c.nombre.toLowerCase().includes('deuda'));
+      if (debtCat) {
+        catId = debtCat.id;
+      } else {
+        const newCatData: Omit<Category, 'id'> = {
+          nombre: 'Deudas y Préstamos',
+          tipo: 'gasto',
+          color: '#ef4444',
+          icono: 'credit-card',
+        };
+        await addCategory(newCatData);
+        const createdCat = categories.find((c) => c.nombre.toLowerCase().includes('deuda'));
+        if (createdCat) catId = createdCat.id;
+      }
+    }
+
+    const quotaAmount = calculateRegularQuotaAmount(
+      data.monto_total,
+      data.num_cuotas,
+      data.tasa_interes,
+      data.tipo_calculo
+    );
+
+    const tempDebtId = 'debt-' + Date.now();
+    const newDebtObj: Debt = {
+      ...data,
+      id: tempDebtId,
+      user_id: user?.id,
+      saldo_pendiente: data.monto_total,
+      monto_cuota: quotaAmount,
+      category_id: catId,
+      estado: 'activa',
+      created_at: new Date().toISOString(),
+    };
+
+    const generatedInstallments = generateDebtInstallments(
+      tempDebtId,
+      data.monto_total,
+      data.num_cuotas,
+      data.frecuencia,
+      data.fecha_inicio,
+      data.tipo_calculo,
+      data.tasa_interes,
+      user?.id
+    );
+
+    if (isSupabaseConfigured && supabase && user) {
+      try {
+        const { data: dbDebt, error: dErr } = await supabase
+          .from('debts')
+          .insert({
+            user_id: user.id,
+            nombre: data.nombre,
+            acreedor: data.acreedor,
+            moneda: data.moneda,
+            monto_total: data.monto_total,
+            saldo_pendiente: data.monto_total,
+            num_cuotas: data.num_cuotas,
+            frecuencia: data.frecuencia,
+            fecha_inicio: data.fecha_inicio,
+            tipo_calculo: data.tipo_calculo,
+            tasa_interes: data.tasa_interes,
+            monto_cuota: quotaAmount,
+            category_id: catId || null,
+            account_id: data.account_id || null,
+            descripcion: data.descripcion || null,
+            estado: 'activa',
+          })
+          .select()
+          .single();
+
+        if (!dErr && dbDebt) {
+          const dbInstallments = generatedInstallments.map((inst) => ({
+            debt_id: dbDebt.id,
+            user_id: user.id,
+            numero: inst.numero,
+            fecha_vencimiento: inst.fecha_vencimiento,
+            monto: inst.monto,
+            monto_capital: inst.monto_capital,
+            monto_interes: inst.monto_interes,
+            monto_pagado: 0,
+            estado: 'pendiente',
+          }));
+
+          const { data: insData } = await supabase
+            .from('debt_installments')
+            .insert(dbInstallments)
+            .select();
+
+          setDebts((prev) => [dbDebt, ...prev]);
+          if (insData && insData.length > 0) {
+            setDebtInstallments((prev) => [...prev, ...insData]);
+          } else {
+            setDebtInstallments((prev) => [
+              ...prev,
+              ...generatedInstallments.map((i) => ({ ...i, debt_id: dbDebt.id })),
+            ]);
+          }
+          return dbDebt;
+        }
+      } catch (err) {
+        console.warn('Error al guardar deuda en Supabase:', err);
+      }
+    }
+
+    // Modo local / Fallback
+    setDebts((prev) => [newDebtObj, ...prev]);
+    setDebtInstallments((prev) => [...prev, ...generatedInstallments]);
+    return newDebtObj;
+  };
+
+  const deleteDebt = async (id: string) => {
+    setDebts((prev) => prev.filter((d) => d.id !== id));
+    setDebtInstallments((prev) => prev.filter((i) => i.debt_id !== id));
+    setDebtPayments((prev) => prev.filter((p) => p.debt_id !== id));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('debts').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Error al eliminar deuda en Supabase:', err);
+      }
+    }
+  };
+
+  const payDebtInstallment = async (
+    installmentId: string,
+    amountToPay: number,
+    accountId: string,
+    nota?: string
+  ) => {
+    const installment = debtInstallments.find((i) => i.id === installmentId);
+    if (!installment) return;
+    const debt = debts.find((d) => d.id === installment.debt_id);
+    if (!debt) return;
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return;
+
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+    const nowIso = new Date().toISOString();
+
+    let montoEnCuenta = amountToPay;
+    let rateUsed = activeUsdRate;
+
+    if (debt.moneda === account.moneda) {
+      montoEnCuenta = amountToPay;
+    } else {
+      montoEnCuenta = convert(amountToPay, debt.moneda, account.moneda);
+      if (debt.moneda === 'USD' && account.moneda === 'VES') {
+        rateUsed = amountToPay > 0 ? montoEnCuenta / amountToPay : activeUsdRate;
+      } else if (debt.moneda === 'VES' && account.moneda === 'USD') {
+        rateUsed = montoEnCuenta > 0 ? amountToPay / montoEnCuenta : activeUsdRate;
+      }
+    }
+
+    const usdVal = convert(montoEnCuenta, account.moneda, 'USD');
+    const vesVal = convert(montoEnCuenta, account.moneda, 'VES');
+
+    const txNote = `Pago Cuota #${installment.numero} - ${debt.nombre} (${debt.acreedor})${nota ? ` • ${nota}` : ''}`;
+    const debtCategory = categories.find((c) => c.nombre.toLowerCase().includes('deuda'));
+    const categoryId = debt.category_id || debtCategory?.id;
+
+    // Registrar transacción de gasto
+    await addTransaction({
+      account_id: accountId,
+      category_id: categoryId,
+      tipo: 'gasto',
+      monto: Number(montoEnCuenta.toFixed(2)),
+      moneda: account.moneda,
+      monto_usd: Number(usdVal.toFixed(2)),
+      monto_ves: Number(vesVal.toFixed(2)),
+      tasa_cambio: rateUsed,
+      fecha: nowIso,
+      nota: txNote,
+    });
+
+    // Actualizar estado de la cuota
+    const nuevoMontoPagado = Number(((installment.monto_pagado || 0) + amountToPay).toFixed(2));
+    const isCompleted = nuevoMontoPagado >= installment.monto - 0.01;
+    const nuevoEstado: InstallmentStatus = isCompleted ? 'pagada' : 'parcial';
+
+    const updatedInstallment: DebtInstallment = {
+      ...installment,
+      monto_pagado: nuevoMontoPagado,
+      estado: nuevoEstado,
+      fecha_pago: nowIso,
+    };
+
+    setDebtInstallments((prev) =>
+      prev.map((i) => (i.id === installmentId ? updatedInstallment : i))
+    );
+
+    // Registrar pago
+    const paymentId = 'pay-' + Date.now();
+    const newPayment: DebtPayment = {
+      id: paymentId,
+      debt_id: debt.id,
+      installment_id: installment.id,
+      account_id: accountId,
+      monto: amountToPay,
+      moneda: debt.moneda,
+      tasa_cambio: rateUsed,
+      fecha: nowIso,
+      nota: txNote,
+      user_id: user?.id,
+      created_at: nowIso,
+    };
+    setDebtPayments((prev) => [newPayment, ...prev]);
+
+    // Actualizar saldo de la deuda
+    const capitalAmortizado = installment.monto_capital > 0
+      ? Math.min(amountToPay, installment.monto_capital)
+      : amountToPay;
+    const nuevoSaldo = Math.max(0, Number((debt.saldo_pendiente - capitalAmortizado).toFixed(2)));
+
+    const otherInstallments = debtInstallments.filter((i) => i.debt_id === debt.id && i.id !== installmentId);
+    const todasPagadas = isCompleted && otherInstallments.every((i) => i.estado === 'pagada');
+
+    const updatedDebt: Debt = {
+      ...debt,
+      saldo_pendiente: nuevoSaldo,
+      estado: todasPagadas ? 'pagada' : 'activa',
+    };
+    setDebts((prev) => prev.map((d) => (d.id === debt.id ? updatedDebt : d)));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('debt_installments')
+          .update({
+            monto_pagado: nuevoMontoPagado,
+            estado: nuevoEstado,
+            fecha_pago: nowIso,
+          })
+          .eq('id', installmentId);
+
+        await supabase
+          .from('debts')
+          .update({
+            saldo_pendiente: nuevoSaldo,
+            estado: updatedDebt.estado,
+          })
+          .eq('id', debt.id);
+
+        await supabase.from('debt_payments').insert({
+          debt_id: debt.id,
+          installment_id: installment.id,
+          account_id: accountId,
+          monto: amountToPay,
+          moneda: debt.moneda,
+          tasa_cambio: rateUsed,
+          fecha: nowIso,
+          nota: txNote,
+          user_id: user?.id,
+        });
+      } catch (err) {
+        console.warn('Error al persistir pago de cuota en Supabase:', err);
+      }
+    }
+  };
+
+  const addDebtExtraPayment = async (
+    debtId: string,
+    amountToPay: number,
+    accountId: string,
+    nota?: string
+  ) => {
+    const debt = debts.find((d) => d.id === debtId);
+    if (!debt) return;
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return;
+
+    const activeUsdRate = rates.find((r) => r.moneda === 'USD')?.tasa_a_ves || 450;
+    const nowIso = new Date().toISOString();
+
+    let montoEnCuenta = amountToPay;
+    let rateUsed = activeUsdRate;
+
+    if (debt.moneda === account.moneda) {
+      montoEnCuenta = amountToPay;
+    } else {
+      montoEnCuenta = convert(amountToPay, debt.moneda, account.moneda);
+      if (debt.moneda === 'USD' && account.moneda === 'VES') {
+        rateUsed = amountToPay > 0 ? montoEnCuenta / amountToPay : activeUsdRate;
+      } else if (debt.moneda === 'VES' && account.moneda === 'USD') {
+        rateUsed = montoEnCuenta > 0 ? amountToPay / montoEnCuenta : activeUsdRate;
+      }
+    }
+
+    const usdVal = convert(montoEnCuenta, account.moneda, 'USD');
+    const vesVal = convert(montoEnCuenta, account.moneda, 'VES');
+
+    const txNote = `Abono extraordinario a capital - ${debt.nombre} (${debt.acreedor})${nota ? ` • ${nota}` : ''}`;
+    const debtCategory = categories.find((c) => c.nombre.toLowerCase().includes('deuda'));
+    const categoryId = debt.category_id || debtCategory?.id;
+
+    await addTransaction({
+      account_id: accountId,
+      category_id: categoryId,
+      tipo: 'gasto',
+      monto: Number(montoEnCuenta.toFixed(2)),
+      moneda: account.moneda,
+      monto_usd: Number(usdVal.toFixed(2)),
+      monto_ves: Number(vesVal.toFixed(2)),
+      tasa_cambio: rateUsed,
+      fecha: nowIso,
+      nota: txNote,
+    });
+
+    const paymentId = 'pay-' + Date.now();
+    const newPayment: DebtPayment = {
+      id: paymentId,
+      debt_id: debt.id,
+      account_id: accountId,
+      monto: amountToPay,
+      moneda: debt.moneda,
+      tasa_cambio: rateUsed,
+      fecha: nowIso,
+      nota: txNote,
+      user_id: user?.id,
+      created_at: nowIso,
+    };
+    setDebtPayments((prev) => [newPayment, ...prev]);
+
+    const nuevoSaldo = Math.max(0, Number((debt.saldo_pendiente - amountToPay).toFixed(2)));
+    const esPagada = nuevoSaldo <= 0;
+
+    const updatedDebt: Debt = {
+      ...debt,
+      saldo_pendiente: nuevoSaldo,
+      estado: esPagada ? 'pagada' : 'activa',
+    };
+    setDebts((prev) => prev.map((d) => (d.id === debt.id ? updatedDebt : d)));
+
+    // Si la deuda quedó saldada a 0, marcar todas las cuotas pendientes como pagadas
+    if (esPagada) {
+      setDebtInstallments((prev) =>
+        prev.map((i) =>
+          i.debt_id === debt.id && i.estado !== 'pagada'
+            ? { ...i, estado: 'pagada', monto_pagado: i.monto, fecha_pago: nowIso }
+            : i
+        )
+      );
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('debts')
+          .update({ saldo_pendiente: nuevoSaldo, estado: updatedDebt.estado })
+          .eq('id', debt.id);
+
+        if (esPagada) {
+          await supabase
+            .from('debt_installments')
+            .update({ estado: 'pagada', fecha_pago: nowIso })
+            .eq('debt_id', debt.id)
+            .neq('estado', 'pagada');
+        }
+
+        await supabase.from('debt_payments').insert({
+          debt_id: debt.id,
+          account_id: accountId,
+          monto: amountToPay,
+          moneda: debt.moneda,
+          tasa_cambio: rateUsed,
+          fecha: nowIso,
+          nota: txNote,
+          user_id: user?.id,
+        });
+      } catch (err) {
+        console.warn('Error al registrar abono extraordinario en Supabase:', err);
+      }
+    }
+  };
+
   const seedSupabaseDemoData = async () => {
     if (!isSupabaseConfigured || !supabase || !user) return;
     setIsLoading(true);
@@ -916,6 +1444,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     setTransactions(INITIAL_TRANSACTIONS);
     setBudgets(INITIAL_BUDGETS);
     setGoals(INITIAL_GOALS);
+    setDebts([]);
+    setDebtInstallments([]);
+    setDebtPayments([]);
     setRates(INITIAL_RATES);
     setActiveRateSource('BCV');
   };
@@ -949,6 +1480,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       setTransactions([]);
       setBudgets([]);
       setGoals([]);
+      setDebts([]);
+      setDebtInstallments([]);
+      setDebtPayments([]);
       setIsLoading(false);
     }
   };
@@ -968,6 +1502,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         budgets,
         goals,
         rates,
+        debts,
+        debtInstallments,
+        debtPayments,
         liveQuotes,
         isSyncingRates,
         lastRatesSync,
@@ -987,12 +1524,17 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         updateAccount,
         deleteAccount,
         addCategory,
+        deleteCategory,
         addBudget,
         deleteBudget,
         addGoal,
         updateGoalProgress,
         deleteGoal,
         transferFunds,
+        addDebt,
+        deleteDebt,
+        payDebtInstallment,
+        addDebtExtraPayment,
         resetToDefaultData,
         seedSupabaseDemoData,
         loginUser,

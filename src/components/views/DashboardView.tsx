@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useFinance } from '@/context/FinanceContext';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, parseTransactionDate } from '@/lib/formatters';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: string) => void;
@@ -23,24 +23,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     preferredViewCurrency,
     convert,
     isSupabaseMode,
+    debts,
+    debtInstallments,
   } = useFinance();
 
   // Helper for formatting number into whole and decimal parts
   const formatAmountParts = (val: number, currency: 'VES' | 'USD') => {
-    const symbol = currency === 'VES' ? 'Bs. ' : '$';
-    const formatted = val.toLocaleString('es-VE', {
+    const isNegative = val < 0;
+    const absVal = Math.abs(val);
+    const prefix = isNegative ? '-' : '';
+    const symbol = currency === 'VES' ? `${prefix}Bs. ` : `${prefix}$`;
+    const formatted = absVal.toLocaleString('es-VE', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
     const [whole, decimal] = formatted.split(',');
-    return { symbol, whole, decimal: decimal || '00' };
+    return { symbol, whole, decimal: decimal || '00', isNegative };
   };
 
   const isVes = preferredViewCurrency === 'VES';
   const dominantNetWorth = isVes ? summary.patrimonio_ves : summary.patrimonio_usd;
   const secondaryNetWorth = isVes ? summary.patrimonio_usd : summary.patrimonio_ves;
-  const secondarySymbol = isVes ? '$' : 'Bs. ';
-  const secondaryFormatted = secondaryNetWorth.toLocaleString('es-VE', {
+  const secondaryIsNegative = secondaryNetWorth < 0;
+  const secondaryPrefix = secondaryIsNegative ? '-' : '';
+  const secondarySymbol = isVes ? `${secondaryPrefix}$` : `${secondaryPrefix}Bs. `;
+  const secondaryFormatted = Math.abs(secondaryNetWorth).toLocaleString('es-VE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -96,8 +103,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const secondaryGastos = isVes ? summary.gastos_mes_usd : summary.gastos_mes_ves;
 
   const fmtSecondary = (val: number) => {
-    const sym = isVes ? '$' : 'Bs. ';
-    return `${sym}${val.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const isNeg = val < 0;
+    const sym = isVes ? `${isNeg ? '-' : ''}$` : `${isNeg ? '-' : ''}Bs. `;
+    return `${sym}${Math.abs(val).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   // Fuentes de ingreso dinámicas
@@ -106,8 +114,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const curM = now.getMonth();
     const curY = now.getFullYear();
     const incomeTxs = transactions.filter((t) => {
-      const d = new Date(t.fecha);
-      return t.tipo === 'ingreso' && d.getMonth() === curM && d.getFullYear() === curY;
+      const d = parseTransactionDate(t.fecha);
+      return t.tipo === 'ingreso' && d.month === curM && d.year === curY;
     });
     return incomeTxs.length;
   }, [transactions]);
@@ -128,8 +136,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const curM = now.getMonth();
     const curY = now.getFullYear();
     const gastosCount = transactions.filter((t) => {
-      const d = new Date(t.fecha);
-      return t.tipo === 'gasto' && d.getMonth() === curM && d.getFullYear() === curY;
+      const d = parseTransactionDate(t.fecha);
+      return t.tipo === 'gasto' && d.month === curM && d.year === curY;
     }).length;
 
     return `${gastosCount} ${gastosCount === 1 ? 'salida' : 'salidas'}`;
@@ -298,6 +306,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 4);
   }, [transactions, categories, isVes, convert, rates]);
+
+  // Próximas cuotas de deudas y préstamos
+  const upcomingDebtsInstallments = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const list: {
+      debt: typeof debts[0];
+      installment: typeof debtInstallments[0];
+      diffDays: number;
+    }[] = [];
+
+    debts
+      .filter((d) => d.estado === 'activa')
+      .forEach((debt) => {
+        const pending = debtInstallments
+          .filter((i) => i.debt_id === debt.id && i.estado !== 'pagada')
+          .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
+
+        if (pending.length > 0) {
+          const nextInst = pending[0];
+          const dueDate = new Date(nextInst.fecha_vencimiento);
+          const todayDate = new Date(today);
+          const diffDays = Math.ceil((dueDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+          list.push({ debt, installment: nextInst, diffDays });
+        }
+      });
+
+    list.sort((a, b) => a.installment.fecha_vencimiento.localeCompare(b.installment.fecha_vencimiento));
+    return list.slice(0, 3);
+  }, [debts, debtInstallments]);
 
   const currentMonthName = useMemo(() => {
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -630,6 +667,98 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 )}
               </div>
             </div>
+
+          </div>
+
+          {/* Widget de Próximas Cuotas de Préstamos / Deudas */}
+          <div className="space-y-3 pt-4 border-t border-neutral-800/40">
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-neutral-400">credit_card</span>
+                <h2 className="text-sm font-medium text-neutral-200">Próximas Cuotas de Deudas</h2>
+              </div>
+              <button
+                onClick={() => onNavigateTab('debts')}
+                className="text-xs font-mono text-neutral-400 hover:text-neutral-200 transition-colors"
+              >
+                Ver todas →
+              </button>
+            </div>
+
+            {upcomingDebtsInstallments.length > 0 ? (
+              <div className="space-y-2">
+                {upcomingDebtsInstallments.map(({ debt, installment, diffDays }) => {
+                  const isOverdue = diffDays < 0;
+                  const isToday = diffDays === 0;
+
+                  return (
+                    <div
+                      key={installment.id}
+                      onClick={() => onNavigateTab('debts')}
+                      className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${
+                        isOverdue
+                          ? 'border-rose-900/60 bg-rose-950/15 hover:border-rose-700/60'
+                          : 'border-neutral-800/40 bg-neutral-900/20 hover:border-neutral-700/60'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-neutral-200 truncate group-hover:text-white">
+                            {debt.nombre}
+                          </span>
+                          <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-neutral-800 text-neutral-400">
+                            Cuota #{installment.numero}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-neutral-500 flex items-center gap-1.5 mt-0.5">
+                          <span
+                            className={
+                              isOverdue
+                                ? 'text-rose-400 font-medium'
+                                : isToday
+                                ? 'text-amber-400 font-medium'
+                                : 'text-neutral-400'
+                            }
+                          >
+                            {isOverdue
+                              ? `Vencida (${Math.abs(diffDays)}d)`
+                              : isToday
+                              ? 'Vence hoy'
+                              : `En ${diffDays} días`}
+                          </span>
+                          <span>•</span>
+                          <span className="font-mono">{installment.fecha_vencimiento}</span>
+                        </div>
+                      </div>
+
+                      <div className="text-right font-mono text-xs flex-shrink-0">
+                        <div className="text-neutral-100 font-medium">
+                          {formatCurrency(
+                            installment.monto - (installment.monto_pagado || 0),
+                            debt.moneda
+                          )}
+                        </div>
+                        <div className="text-[10px] text-neutral-500">
+                          {debt.moneda !== 'USD'
+                            ? `$${convert(installment.monto, debt.moneda, 'USD').toFixed(2)}`
+                            : `Bs. ${convert(installment.monto, 'USD', 'VES').toLocaleString('es-VE', { maximumFractionDigits: 0 })}`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                onClick={() => onNavigateTab('debts')}
+                className="p-3.5 rounded-lg border border-dashed border-neutral-800/70 hover:border-neutral-700/80 bg-neutral-900/10 text-center cursor-pointer transition-all"
+              >
+                <div className="text-xs text-neutral-400">Sin cuotas pendientes en este momento</div>
+                <div className="text-[11px] text-neutral-600 mt-0.5">
+                  Haz clic para ver o registrar tus préstamos en cuotas
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Subtle Spending Distribution Overview */}

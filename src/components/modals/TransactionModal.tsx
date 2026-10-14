@@ -150,7 +150,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
       monto_usd: Math.round(montoEnUsd * 100) / 100,
       monto_ves: montoEnVes,
       tasa_cambio: rateToUse,
-      fecha: new Date(fecha).toISOString(),
+      fecha: `${fecha}T12:00:00.000Z`,
       nota: finalNota || undefined,
     });
 

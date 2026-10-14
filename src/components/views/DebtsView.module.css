@@ -1,0 +1,841 @@
+/* ==========================================================
+   DEUDAS Y PRÉSTAMOS — estilos basados en la plantilla
+   ========================================================== */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ---------- Header ---------- */
+.header {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(31, 35, 46, 0.6);
+}
+
+@media (min-width: 768px) {
+  .header {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.title {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  color: #a3a3a3;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.syncBadge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: rgba(23, 23, 23, 0.4);
+  border: 1px solid rgba(38, 38, 38, 0.6);
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.syncStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d4d4d4;
+}
+
+.syncDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: #10b981;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.syncDotLocal {
+  background-color: #f59e0b;
+  animation: none;
+}
+
+.syncDivider {
+  color: #404040;
+}
+
+.syncMonth {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.btnNew {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background-color: #f5f5f5;
+  color: #090a0d;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnNew:hover {
+  background-color: #ffffff;
+}
+
+.btnNew:active {
+  transform: scale(0.97);
+}
+
+/* ---------- KPI ---------- */
+.kpiSection {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 8px 0;
+}
+
+.kpiLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a3a3a3;
+}
+
+.dotEmerald {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #34d399;
+  flex-shrink: 0;
+}
+
+.heroRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.heroAmount {
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.heroSub {
+  font-size: 0.875rem;
+  color: #a3a3a3;
+}
+
+.tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(38, 38, 38, 1);
+  background-color: rgba(23, 23, 23, 0.6);
+  color: #a3a3a3;
+}
+
+.tagSmall {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.tagEmerald {
+  color: #34d399;
+  background-color: rgba(2, 44, 34, 0.4);
+  border-color: rgba(6, 95, 70, 0.4);
+}
+
+.tagRose {
+  color: #fb7185;
+  background-color: rgba(76, 5, 25, 0.4);
+  border-color: rgba(159, 18, 57, 0.4);
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(38, 38, 38, 0.6);
+}
+
+@media (min-width: 640px) {
+  .kpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .kpiGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.kpiItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kpiItemLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #737373;
+}
+
+.kpiItemValue {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpiItemValueMuted {
+  color: #d4d4d4;
+}
+
+.kpiItemTotal {
+  font-size: 12px;
+  font-weight: 400;
+  color: #737373;
+}
+
+.kpiItemSub {
+  font-size: 11px;
+  color: #737373;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.textEmerald { color: #34d399 !important; }
+.textRose { color: #fb7185 !important; }
+.textAmber { color: #fbbf24 !important; }
+
+/* ---------- Filtros ---------- */
+.filterBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid rgba(38, 38, 38, 0.6);
+}
+
+.filterTabs {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.filterTab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+  color: #a3a3a3;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.filterTab:hover {
+  color: #ffffff;
+}
+
+.filterTabActive {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.filterDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background-color: #34d399;
+}
+
+.filterCount {
+  color: #737373;
+}
+
+.filterMeta {
+  font-size: 12px;
+  color: #737373;
+}
+
+/* ---------- Layout principal ---------- */
+.mainGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .mainGrid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+.leftCol,
+.rightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.rightCol {
+  gap: 24px;
+}
+
+/* ---------- Tarjeta de préstamo ---------- */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  background-color: rgba(23, 23, 23, 0.3);
+  border: 1px solid rgba(38, 38, 38, 0.4);
+  transition: border-color 0.15s ease;
+}
+
+.card:hover {
+  border-color: rgba(64, 64, 64, 0.5);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cardIdentity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.cardIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: #171717;
+  border: 1px solid #262626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a3a3a3;
+  flex-shrink: 0;
+}
+
+.cardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+}
+
+.cardMeta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.cardAmountGroup {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.cardAmount {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.cardEquivalent {
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.progressBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.progressRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.progressRowValue {
+  color: #ffffff;
+}
+
+.track {
+  width: 100%;
+  height: 4px;
+  border-radius: 9999px;
+  background-color: #262626;
+  overflow: hidden;
+  display: flex;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 9999px;
+  background-color: #10b981;
+  transition: width 0.4s ease;
+}
+
+.fillEmeraldLight { background-color: #34d399; }
+.fillAmber { background-color: #fbbf24; }
+.fillRose { background-color: #fb7185; }
+.fillIndigo { background-color: #818cf8; border-radius: 0; }
+.fillFlat { border-radius: 0; }
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(38, 38, 38, 0.4);
+  font-size: 12px;
+}
+
+.footerInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #a3a3a3;
+}
+
+.footerStrong {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.footerSep {
+  color: #737373;
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btnPay {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: #059669;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btnPay:hover {
+  background-color: #10b981;
+}
+
+.btnGhost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: #a3a3a3;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnGhost:hover {
+  color: #ffffff;
+  background-color: #262626;
+}
+
+.btnIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+  background: transparent;
+  color: #737373;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnIcon:hover {
+  color: #f87171;
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+/* ---------- Calendario de cuotas ---------- */
+.schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(38, 38, 38, 0.4);
+}
+
+.scheduleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #a3a3a3;
+}
+
+.scheduleTitle {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(38, 38, 38, 0.6);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: left;
+}
+
+.table th {
+  padding: 8px 10px;
+  font-weight: 500;
+  color: #737373;
+  background-color: rgba(23, 23, 23, 0.6);
+  border-bottom: 1px solid rgba(38, 38, 38, 0.6);
+}
+
+.table td {
+  padding: 8px 10px;
+  color: #d4d4d4;
+  border-bottom: 1px solid rgba(38, 38, 38, 0.4);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.rowOverdue td {
+  background-color: rgba(76, 5, 25, 0.15);
+}
+
+.alignRight { text-align: right !important; }
+.alignCenter { text-align: center !important; }
+.cellStrong { color: #ffffff !important; font-weight: 500; }
+.cellMuted { color: #737373 !important; }
+.cellSub { font-size: 10px; color: #737373; }
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  background-color: rgba(38, 38, 38, 0.8);
+  color: #a3a3a3;
+}
+
+.statusPaid {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+}
+
+.statusPartial {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+}
+
+.statusOverdue {
+  background-color: rgba(244, 63, 94, 0.1);
+  color: #fb7185;
+}
+
+.btnPaySmall {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: #059669;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btnPaySmall:hover {
+  background-color: #10b981;
+}
+
+/* ---------- Estado vacío / ayuda ---------- */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  border-radius: 12px;
+  background-color: rgba(23, 23, 23, 0.3);
+  border: 1px solid rgba(38, 38, 38, 0.4);
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.emptyText {
+  max-width: 380px;
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.helper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px dashed #1f232e;
+  font-size: 12px;
+  color: #737373;
+  text-align: center;
+}
+
+/* ---------- Columna derecha ---------- */
+.sideCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 12px;
+  background-color: rgba(23, 23, 23, 0.3);
+  border: 1px solid rgba(38, 38, 38, 0.4);
+}
+
+.sideHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sideTitle {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+}
+
+.sideMeta {
+  font-size: 12px;
+  color: #737373;
+}
+
+.sideRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  font-size: 12px;
+}
+
+.sideRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #a3a3a3;
+}
+
+.sideRowLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sideRowValue {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.sideRowValueMuted {
+  color: #d4d4d4;
+}
+
+.sideRowExtra {
+  color: #737373;
+  font-weight: 400;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.dotBgEmerald { background-color: #10b981; }
+.dotBgIndigo { background-color: #818cf8; }
+.dotBgAmber { background-color: #fbbf24; }
+.dotBgRose { background-color: #fb7185; }
+.dotBgMuted { background-color: #525252; }
+
+.upcomingList {
+  display: flex;
+  flex-direction: column;
+}
+
+.upcomingItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(38, 38, 38, 0.3);
+}
+
+.upcomingItem:last-child {
+  border-bottom: none;
+}
+
+.upcomingFaded {
+  opacity: 0.6;
+}
+
+.upcomingLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.upcomingName {
+  color: #ffffff;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upcomingRight {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.upcomingAmount {
+  display: block;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.upcomingDays {
+  display: block;
+  font-size: 11px;
+  color: #737373;
+}
+
+.sideEmpty {
+  padding: 12px 0;
+  font-size: 12px;
+  color: #737373;
+  text-align: center;
+}

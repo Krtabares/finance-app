@@ -22,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Panel Principal', icon: 'grid_view' },
     { id: 'accounts', label: 'Cuentas y Billeteras', icon: 'account_balance_wallet' },
     { id: 'transactions', label: 'Transacciones', icon: 'sync_alt' },
+    { id: 'debts', label: 'Deudas y Cuotas', icon: 'credit_card' },
     { id: 'budgets', label: 'Presupuestos', icon: 'pie_chart' },
     { id: 'goals', label: 'Metas de Ahorro', icon: 'savings' },
     { id: 'rates', label: 'Tasas y Conversor', icon: 'currency_exchange' },
